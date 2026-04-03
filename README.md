@@ -1,9 +1,16 @@
-# 🎤 Noise Detection System (RP2040 + MicroPython)
+# Awareness wearable
 
 ## 📌 Overview
+A modular wearable that monitors noise, light, and crowd levels to help you stay in control of your environment.
+
+## This version: 🎤 Noise Detection System (RP2040 + MicroPython)
 
 This project reads analog sound signals from a microphone using an ADC pin on an RP2040 microcontroller and detects noise levels based on configurable thresholds.
 
+## Features
+- Noise detection -> current version
+- Light sensitivity (upcoming)
+- Crowd awareness (upcoming)
 
 ## 📦 Prerequisites
 
@@ -85,7 +92,9 @@ project/
     ├── project_structure.md
     └── changelog.md
 ```
-
+## Progress Documentation
+- 📍 [Roadmap](docs/roadmap.md)
+- 📈 [Progress](docs/progress.md)
 
 ## Versions
 current v0.1 (more versions: [changelog](docs/changelog.md))
