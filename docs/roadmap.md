@@ -35,3 +35,14 @@
 - Add sound feedback for crowdedness, with a distinct alert when the place becomes crowded.
 
 - Second 3D-printed enclosure version (v2), refined after testing the first prototype.
+
+## Phase 4 — Stability (Jun 20 – Jun 26)
+**Dates:** Jun 26
+
+**Goal:** Stabilize the system with reliability testing and polish all features
+
+**Deliverable:** 
+- Full system stress testing (noise + light + crowdedness under real conditions)
+- Bug fixes and performance optimization across ESP32 and mobile app
+- Battery life optimization and power management improvements
+- Final 3D-printed enclosure (v3) with production-ready design and mounting options
