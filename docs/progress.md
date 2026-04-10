@@ -17,10 +17,13 @@ Calibrate correctly microphone
 - [ ] Seeds meeting
 
 ### Review
+- 
 
 #### What worked
+- 
 
 #### Problems
+- 
 
 #### Next steps
 - Batery + Low energy mode
