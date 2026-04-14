@@ -12,7 +12,7 @@ Calibrate correctly microphone
 - [ ] Microphone calibration & testing
     - [ ] Understand for to calibrate the current microphone component
     - [ ] Control microphoone threshold
-- [ ] MVP app
+- [X] Mock-up app
 - [ ] Identify what we need for the bluetooth
 - [ ] Seeds meeting
 
