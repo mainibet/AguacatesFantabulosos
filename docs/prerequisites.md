@@ -1,7 +1,7 @@
 ## 📦 Prerequisites
 
 ### 🔧 Hardware
-- 1x RP2040-based board (e.g. Waveshare RP2040)
+- 1x ESP32-C3-based board (e.g. ESP32-C3 super mini)
 - 1x Microphone sensor module (analog output)
 - 1x Breadboard
 - Jumper wires (male-to-male)
@@ -13,13 +13,25 @@
 ### 💻 Software
 - Python 3.x (for local development tools)
 - Thonny IDE (recommended for MicroPython development)
-- MicroPython firmware installed on RP2040
+- MicroPython firmware installed on ESP32-C3
 
 ---
 
 ### ⚙️ Microcontroller firmware
-- MicroPython firmware flashed on the RP2040 board
-  - https://micropython.org/download/rp2-pico/
+- **Target**: MicroPython for ESP32-C3
+- **Installation**: Flashed using Thonny IDE or `esptool.py`
+- **Official Download**: [MicroPython ESP32-C3 Firmware](https://micropython.org/download/ESP32_GENERIC_C3/)
+
+---
+
+### 💻 Development Mode
+1. Ensure `aioble` is installed: *Tools → Manage Packages → aioble → Install*.
+2. Run `main.py` via Thonny.
+3. Monitor BLE alerts in real-time.
+
+### 📟 Deployment
+1. Save `main.py` and `config.py` to **MicroPython device (ESP32)**.
+2. The code runs on power-up, initiating an `asyncio` loop for sensor monitoring and BLE advertising.
 
 ---
 

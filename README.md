@@ -3,12 +3,14 @@
 ## 📌 Overview
 A modular wearable that monitors noise, light, and crowd levels to help you stay in control of your environment.
 
-## This version: 🎤 Noise Detection System (RP2040 + MicroPython)
+## This version: 🎤 Noise Detection System (ESP32-C3 + MicroPython)
 
-This project reads analog sound signals from a microphone using an ADC pin on an RP2040 microcontroller and detects noise levels based on configurable thresholds.
+his project reads analog sound signals using an ESP32-C3 Super Mini, computes a baseline noise level at startup, 
+and broadcasts alerts via **Bluetooth Low Energy (BLE)** when the noise exceeds a configured threshold.
 
 ## Features
-- Noise detection -> current version
+- Noise detection
+- BLE notifications
 - Light sensitivity (upcoming)
 - Crowd awareness (upcoming)
 
@@ -24,17 +26,17 @@ See full setup requirements here:
 
 ## 🔌 Signal Flow
 
-Microphone → Analog voltage → ADC (GP26) → Digital value → Processing → Alert
+Microphone → Analog voltage → ADC (GND) → Digital value → Processing → Alert
 
 
 ## 🚀 Usage
 
 ### 💻 Running from Thonny (development mode)
 
-1. Connect the RP2040 board via USB
+1. Connect the ESP32-C3 board via USB
 2. Open Thonny
 3. Select interpreter:
-   - MicroPython (Raspberry Pi Pico / RP2040)
+   - MicroPython (ESP32-C3)
 
 4. Open `main.py`
 5. Click **Run**
@@ -90,6 +92,7 @@ project/
     ├── calibration.md
     ├── architecture.md
     ├── project_structure.md
+    ├── testing.md
     └── changelog.md
 ```
 ## Progress Documentation
