@@ -1,29 +1,84 @@
 # Progress Log
 
 Total weeks: 13.3
+-----
+## Week NB
+Apr 27 - May 4
+
+### Goal
+First full cycle complete-sound sensor
+
+### Tasks
+- [ ] Fix App
+- [ ] Connect App with BLE
+- [ ] Connect App with device
+- [ ] First 3d printed prototype
+- [ ] Propose batter component
+- [ ] Seeds meeting
+
+### Review
+
+#### What worked
+- Having 2 microchips for testing
+
+#### Problems
+
+#### Next steps
+
+---
+
+## Week NB
+Apr 20 - 26
+
+### Goal
+Improve microphone calibration with ESP32-C3
+
+### Tasks
+- [X] First App version
+- [X] Implement BLE in ESP32-C3 with Thonny (mycropython)
+- [X] Seeds meeting
+
+### Review
+
+#### What worked
+- ESP32-C3 improved the sound monitoring
+
+#### Problems
+- We had issues to meet and share the device for testing
+- Buggy app, randomly closes (sometimes) and has some ugly images
+
+#### Next steps
+- Move the device program to ESP32-C3
+- Implement BLE
+- Connect device with App
+- Research possible battery size to define measures for the 3d printed
+- Define design for the 3d printing
+- Use a second ESP32-C3 for testing (1 per person)
+
 ---
 ## Week 3
-Arp 13 - 19
+Apr 13 - 19
 
 ### Goal
 Calibrate correctly microphone
 
 ### Tasks
-- [ ] Microphone calibration & testing
-    - [ ] Understand for to calibrate the current microphone component
-    - [ ] Control microphoone threshold
+- [X] Microphone calibration & testing
+    - [X] Understand for to calibrate the current microphone component
+    - [X] Control microphoone threshold
 - [X] Mock-up app
-- [ ] Identify what we need for the bluetooth
-- [ ] Seeds meeting
+- [X] Identify what we need for the bluetooth
+- [X] Seeds meeting
+
 
 ### Review
-- 
+- Decision made
 
 #### What worked
-- 
+- Sound sensor is working
 
 #### Problems
-- 
+- The current microphone is hard to calibrate and differentiate sounds
 
 #### Next steps
 - Batery + Low energy mode
