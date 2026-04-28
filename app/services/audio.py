@@ -37,6 +37,8 @@ class AudioMonitor:
  
     def stop(self):
         self._running = False
+        if self._thread:
+            self._thread.join(timeout=1.0)
         if self._stream:
             self._stream.stop_stream()
             self._stream.close()

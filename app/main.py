@@ -43,6 +43,7 @@ class RootLayout(BoxLayout):
             text="AwarenessApp",
             font_size='18sp', bold=True, color=TEXT,
             halign='left', valign='middle',
+            text_size=(Window.width * 0.7, dp(44)),
         ))
         header.add_widget(Label(
             text="● CONNECTED",
@@ -53,12 +54,15 @@ class RootLayout(BoxLayout):
         self.add_widget(header)
  
         # Level card
-        level_card = Card(size_hint_y=None, height=dp(130))
-        level_card.add_widget(Label(
+        self.add_widget(Label(
             text="CURRENT NOISE LEVEL",
             font_size='13sp', bold=True, color=TEXT,
             size_hint_y=None, height=dp(24),
+            halign='center', valign='middle',
+            text_size=(Window.width - dp(32), dp(24)),
         ))
+        level_card = Card(size_hint_y=None, height=dp(106))
+
         self._status_lbl = Label(
             text="Monitoring environment...",
             font_size='12sp', color=MUTED,
@@ -76,12 +80,15 @@ class RootLayout(BoxLayout):
         self.add_widget(level_card)
  
         # Threshold card
-        thresh_card = Card(size_hint_y=None, height=dp(110))
-        thresh_card.add_widget(Label(
+        self.add_widget(Label(
             text="THRESHOLD",
             font_size='13sp', bold=True, color=TEXT,
             size_hint_y=None, height=dp(24),
+            halign='center', valign='middle',
+            text_size=(Window.width - dp(32), dp(24)),
         ))
+        thresh_card = Card(size_hint_y=None, height=dp(86))
+
         self._thresh_lbl = Label(
             text="75 dB",
             font_size='14sp', color=ACCENT,
