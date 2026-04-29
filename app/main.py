@@ -58,33 +58,32 @@ class ThresholdSlider(Widget):
         self.canvas.clear()
         cx      = self._thumb_x()
         ty      = self.center_y
-        track_h = dp(18)
+        track_h = dp(6)      # Altura delgada
+        radius  = [track_h / 2] # <--- circular radio
         thumb_r = dp(11)
 
         with self.canvas:
-            # Full grey track — fully rounded
+            # Bar background (Gray)
             Color(*BAR_BG)
             RoundedRectangle(
                 pos=(self._track_x(), ty - track_h / 2),
                 size=(self._track_w(), track_h),
-                radius=[dp(9)]
+                radius=radius # <--- use circular radio
             )
-            # Filled PURPLE portion — rounded left side
+            
+            # Barra de progreso (Morada)
             filled_w = cx - self._track_x()
             if filled_w > 0:
                 Color(*PURPLE)
                 RoundedRectangle(
                     pos=(self._track_x(), ty - track_h / 2),
                     size=(filled_w, track_h),
-                    radius=[dp(9)]
+                    radius=radius # <--- use circular radio
                 )
-            # Thumb — purple circle, same size as track height
+            
+            # Button (Thumb)
             Color(*PURPLE)
             Ellipse(pos=(cx - thumb_r, ty - thumb_r), size=(thumb_r * 2, thumb_r * 2))
-            # Inner white dot
-            Color(1, 1, 1, 0.9)
-            inner = dp(3)
-            Ellipse(pos=(cx - inner, ty - inner), size=(inner * 2, inner * 2))
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
@@ -122,6 +121,7 @@ class RootLayout(BoxLayout):
         self.orientation = 'vertical'
         self.padding     = dp(16)
         self.spacing     = dp(0)
+        self._dot_count = 0
 
         self._threshold = 75.0
         self._monitor   = AudioMonitor()
@@ -256,9 +256,14 @@ class RootLayout(BoxLayout):
         self._thresh_lbl.text = f"{value:.0f} dB"
 
     def _tick(self, dt):
+        self._dot_count = (self._dot_count + 1) % 4
+        dots = "." * self._dot_count
+        self._status_lbl.text = f"Monitoring environment{dots}"
+
         db = self._monitor.current_db
         self._db_lbl.text = f"{db:.1f} dB"
         self._bar.update(db, self._threshold)
+
         if db > self._threshold:
             if not self._alerted:
                 self._log_list.add_event(db)
