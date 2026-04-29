@@ -1,3 +1,4 @@
 kivy[base]>=2.3.0
 pyaudio>=0.2.14
 numpy>=1.26.0
+bleak==0.22.3 #only for PC veresion

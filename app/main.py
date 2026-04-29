@@ -12,7 +12,8 @@ from kivy.graphics import Color, RoundedRectangle, Line, Rectangle, Ellipse
 
 from ui.theme import ACCENT, TEXT, BORDER, BAR_BG, WINDOW_SIZE, POLL_INTERVAL, DB_MIN, DB_MAX
 from ui.widgets import Card, NoiseBar, LogList
-from services.audio import AudioMonitor
+#from services.audio import AudioMonitor
+from services.ble import BLEMonitor
 
 Window.clearcolor = (0.059, 0.067, 0.082, 1)
 Window.size = WINDOW_SIZE
@@ -118,160 +119,224 @@ class RootLayout(BoxLayout):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.orientation = 'vertical'
-        self.padding     = dp(16)
-        self.spacing     = dp(0)
-        self._dot_count = 0
 
+        self.orientation = 'vertical'
+        self.padding = dp(16)
+        self.spacing = dp(0)
+
+        self._dot_count = 0
         self._threshold = 75.0
-        self._monitor   = AudioMonitor()
-        self._alerted   = False
+        self._alerted = False
+
+        # BLE
+        self._ble = BLEMonitor()
+        self._ble.start()
 
         self._build_ui()
-        self._monitor.start()
+
         Clock.schedule_interval(self._tick, POLL_INTERVAL)
+
+    # ─────────────────────────────────────────────
+    # UI
+    # ─────────────────────────────────────────────
 
     def _build_ui(self):
 
-        # ── Header ────────────────────────────────────────────────────────────
         header = BoxLayout(size_hint_y=None, height=dp(44))
 
         app_name = Label(
             text="AwarenessApp",
-            font_size='18sp', bold=True, color=TEXT,
-            halign='left', valign='middle',
+            font_size='18sp',
+            bold=True,
+            color=TEXT,
+            halign='left',
+            valign='middle',
         )
         app_name.bind(size=lambda w, s: setattr(w, 'text_size', s))
         header.add_widget(app_name)
 
-        # CONNECTED badge — use unicode filled circle (U+25CF) which renders reliably
         badge = Label(
-            text="CONNECTED",   # renders on all platforms
-            font_size='12sp', color=ACCENT,
-            size_hint=(None, None), size=(dp(124), dp(30)),
-            halign='center', valign='middle',
+            text="CONNECTED",
+            font_size='12sp',
+            color=ACCENT,
+            size_hint=(None, None),
+            size=(dp(124), dp(30)),
+            halign='center',
+            valign='middle',
         )
         badge.text_size = (dp(124), dp(30))
+
         with badge.canvas.before:
             Color(*ACCENT)
             self._badge_line = Line(
                 rounded_rectangle=(0, 0, dp(124), dp(30), dp(15)),
                 width=1.2
             )
+
         badge.bind(
             pos=lambda w, _: setattr(
-                self._badge_line, 'rounded_rectangle',
+                self._badge_line,
+                'rounded_rectangle',
                 (w.x, w.y, w.width, w.height, dp(15))
             )
         )
+
         header.add_widget(badge)
         self.add_widget(header)
 
         self.add_widget(Widget(size_hint_y=None, height=dp(14)))
 
-        # ── Noise level card ─────────────────────────────────────────────────
+        # Noise card
         level_card = Card(size_hint_y=None, height=dp(152))
+
         level_card.add_widget(Label(
             text="CURRENT NOISE LEVEL",
-            font_size='15sp', bold=True, color=TEXT,
-            size_hint_y=None, height=dp(22),
-            halign='center', valign='middle',
-            text_size=(Window.width - dp(68), dp(20)),
+            font_size='15sp',
+            bold=True,
+            color=TEXT,
+            size_hint_y=None,
+            height=dp(22),
+            halign='center',
+            valign='middle',
         ))
+
         self._status_lbl = Label(
-            text="Monitoring environment...",
-            font_size='12sp', color=(1, 1, 1, 0.6),
-            size_hint_y=None, height=dp(18),
-            halign='center', valign='middle',
-            text_size=(Window.width - dp(68), dp(18)),
+            text="Waiting for BLE data...",
+            font_size='12sp',
+            color=(1, 1, 1, 0.6),
+            size_hint_y=None,
+            height=dp(18),
+            halign='center',
+            valign='middle',
         )
+
         level_card.add_widget(self._status_lbl)
-        self._bar = NoiseBar()
-        level_card.add_widget(self._bar)
+
         self._db_lbl = Label(
             text="-- dB",
-            font_size='22sp', bold=True, color=TEXT,
-            size_hint_y=None, height=dp(36),
-            halign='center', valign='middle',
-            text_size=(Window.width - dp(68), dp(36)),
+            font_size='22sp',
+            bold=True,
+            color=TEXT,
+            size_hint_y=None,
+            height=dp(36),
+            halign='center',
+            valign='middle',
         )
+
         level_card.add_widget(self._db_lbl)
+
         self.add_widget(level_card)
 
         self.add_widget(Widget(size_hint_y=None, height=dp(14)))
 
-        # ── Threshold card ───────────────────────────────────────────────────
+        # Threshold card
         thresh_card = Card(size_hint_y=None, height=dp(134))
-        thresh_card.add_widget(Widget(size_hint_y=None, height=dp(4)))
+
         thresh_card.add_widget(Label(
             text="THRESHOLD",
-            font_size='15sp', bold=True, color=TEXT,
-            size_hint_y=None, height=dp(22),
-            halign='center', valign='middle',
-            text_size=(Window.width - dp(68), dp(22)),
+            font_size='15sp',
+            bold=True,
+            color=TEXT,
+            size_hint_y=None,
+            height=dp(22),
+            halign='center',
+            valign='middle',
         ))
+
         self._slider = ThresholdSlider(min_val=40, max_val=100, value=75)
         self._slider.on_value_change = self._on_slider
         thresh_card.add_widget(self._slider)
 
-        # Same size and bold as dB label below monitoring
         self._thresh_lbl = Label(
             text="75 dB",
-            font_size='22sp', bold=True, color=TEXT,
-            size_hint_y=None, height=dp(36),
-            halign='center', valign='middle',
-            text_size=(Window.width - dp(68), dp(36)),
+            font_size='22sp',
+            bold=True,
+            color=TEXT,
+            size_hint_y=None,
+            height=dp(36),
+            halign='center',
+            valign='middle',
         )
+
         thresh_card.add_widget(self._thresh_lbl)
         self.add_widget(thresh_card)
 
         self.add_widget(Widget(size_hint_y=None, height=dp(18)))
 
-        # ── Event log section ─────────────────────────────────────────────────
-        self._empty_lbl = Label(
-            text="No events yet.",
-            font_size='12sp', color=(1, 1, 1, 0.4),
-            size_hint_y=None, height=dp(32),
-            halign='left', valign='middle',
-            text_size=(Window.width - dp(32), dp(32)),
-        )
+        # Log
+        log_box = BoxLayout(orientation='vertical', spacing=dp(6))
 
-        log_box = BoxLayout(orientation='vertical', spacing=dp(6), size_hint_y=1)
         log_box.add_widget(Label(
             text="EVENT LOG",
-            font_size='13sp', bold=True, color=TEXT,
-            size_hint_y=None, height=dp(26),
-            halign='left', valign='middle',
-            text_size=(Window.width - dp(32), dp(26)),
+            font_size='13sp',
+            bold=True,
+            color=TEXT,
+            size_hint_y=None,
+            height=dp(26),
         ))
+
+        self._empty_lbl = Label(
+            text="No events yet.",
+            font_size='12sp',
+            color=(1, 1, 1, 0.4),
+            size_hint_y=None,
+            height=dp(32),
+        )
+
         log_box.add_widget(self._empty_lbl)
-        scroll = ScrollView(size_hint_y=1)
+
+        scroll = ScrollView()
         self._log_list = LogList()
         scroll.add_widget(self._log_list)
         log_box.add_widget(scroll)
+
         self.add_widget(log_box)
 
+    # ─────────────────────────────────────────────
+    # EVENTS
+    # ─────────────────────────────────────────────
+
     def _on_slider(self, value):
-        self._threshold       = value
+        self._threshold = value
         self._thresh_lbl.text = f"{value:.0f} dB"
 
+    # ─────────────────────────────────────────────
+    # MAIN LOOP
+    # ─────────────────────────────────────────────
+
     def _tick(self, dt):
+
+        # UI animation dots
         self._dot_count = (self._dot_count + 1) % 4
         dots = "." * self._dot_count
-        self._status_lbl.text = f"Monitoring environment{dots}"
+        self._status_lbl.text = f"Waiting for BLE data{dots}"
 
-        db = self._monitor.current_db
-        self._db_lbl.text = f"{db:.1f} dB"
-        self._bar.update(db, self._threshold)
+        # ---------------- BLE ----------------
+        if self._ble.last_alert:
 
-        if db > self._threshold:
-            if not self._alerted:
-                self._log_list.add_event(db)
-                self._empty_lbl.opacity = 0
-                self._alerted = True
-        else:
-            self._alerted = False
+            msg = self._ble.last_alert
 
+            try:
+                if "ruido=" in msg:
+                    value = int(msg.split("ruido=")[1])
+                    self._log_list.add_event(value)
+
+                    self._db_lbl.text = f"{value:.0f} dB"
+
+                    if value > self._threshold:
+                        if not self._alerted:
+                            self._empty_lbl.opacity = 0
+                            self._alerted = True
+                    else:
+                        self._alerted = False
+
+                else:
+                    self._log_list.add_event(0)
+
+            except:
+                pass
+
+            self._ble.last_alert = None
 
 class AwarenessApp(App):
     def build(self):
