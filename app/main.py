@@ -18,8 +18,7 @@ Window.clearcolor = (0.059, 0.067, 0.082, 1)
 Window.size = WINDOW_SIZE
 
 # Purple for slider — matches HTML prototype --accent (#3a7afe / #5b8cff)
-PURPLE = (0.439, 0.310, 0.961, 1)   # #7050f5 — visible purple
-
+PURPLE = (0.427, 0.176, 0.431, 1)   # #6D2D6E
 
 def _pct(value):
     return max(0.0, min(1.0, (value - DB_MIN) / (DB_MAX - DB_MIN)))
@@ -59,32 +58,32 @@ class ThresholdSlider(Widget):
         self.canvas.clear()
         cx      = self._thumb_x()
         ty      = self.center_y
-        track_h = dp(4)
-        thumb_r = dp(12)   # medium size thumb
+        track_h = dp(18)
+        thumb_r = dp(11)
 
         with self.canvas:
-            # Full grey track
+            # Full grey track — fully rounded
             Color(*BAR_BG)
             RoundedRectangle(
                 pos=(self._track_x(), ty - track_h / 2),
                 size=(self._track_w(), track_h),
-                radius=[dp(2)]
+                radius=[dp(9)]
             )
-            # Filled PURPLE portion
+            # Filled PURPLE portion — rounded left side
             filled_w = cx - self._track_x()
             if filled_w > 0:
                 Color(*PURPLE)
                 RoundedRectangle(
                     pos=(self._track_x(), ty - track_h / 2),
                     size=(filled_w, track_h),
-                    radius=[dp(2)]
+                    radius=[dp(9)]
                 )
-            # Thumb — purple circle
+            # Thumb — purple circle, same size as track height
             Color(*PURPLE)
             Ellipse(pos=(cx - thumb_r, ty - thumb_r), size=(thumb_r * 2, thumb_r * 2))
             # Inner white dot
             Color(1, 1, 1, 0.9)
-            inner = dp(4)
+            inner = dp(3)
             Ellipse(pos=(cx - inner, ty - inner), size=(inner * 2, inner * 2))
 
     def on_touch_down(self, touch):
@@ -147,7 +146,7 @@ class RootLayout(BoxLayout):
 
         # CONNECTED badge — use unicode filled circle (U+25CF) which renders reliably
         badge = Label(
-            text="\u25cf CONNECTED",   # ● solid circle — renders on all platforms
+            text="CONNECTED",   # renders on all platforms
             font_size='12sp', color=ACCENT,
             size_hint=(None, None), size=(dp(124), dp(30)),
             halign='center', valign='middle',
@@ -174,8 +173,8 @@ class RootLayout(BoxLayout):
         level_card = Card(size_hint_y=None, height=dp(152))
         level_card.add_widget(Label(
             text="CURRENT NOISE LEVEL",
-            font_size='13sp', bold=True, color=TEXT,
-            size_hint_y=None, height=dp(20),
+            font_size='15sp', bold=True, color=TEXT,
+            size_hint_y=None, height=dp(22),
             halign='center', valign='middle',
             text_size=(Window.width - dp(68), dp(20)),
         ))
@@ -202,13 +201,14 @@ class RootLayout(BoxLayout):
         self.add_widget(Widget(size_hint_y=None, height=dp(14)))
 
         # ── Threshold card ───────────────────────────────────────────────────
-        thresh_card = Card(size_hint_y=None, height=dp(130))
+        thresh_card = Card(size_hint_y=None, height=dp(134))
+        thresh_card.add_widget(Widget(size_hint_y=None, height=dp(4)))
         thresh_card.add_widget(Label(
             text="THRESHOLD",
-            font_size='13sp', bold=True, color=TEXT,
-            size_hint_y=None, height=dp(20),
+            font_size='15sp', bold=True, color=TEXT,
+            size_hint_y=None, height=dp(22),
             halign='center', valign='middle',
-            text_size=(Window.width - dp(68), dp(20)),
+            text_size=(Window.width - dp(68), dp(22)),
         ))
         self._slider = ThresholdSlider(min_val=40, max_val=100, value=75)
         self._slider.on_value_change = self._on_slider
@@ -240,9 +240,9 @@ class RootLayout(BoxLayout):
         log_box.add_widget(Label(
             text="EVENT LOG",
             font_size='13sp', bold=True, color=TEXT,
-            size_hint_y=None, height=dp(28),
+            size_hint_y=None, height=dp(26),
             halign='left', valign='middle',
-            text_size=(Window.width - dp(32), dp(28)),
+            text_size=(Window.width - dp(32), dp(26)),
         ))
         log_box.add_widget(self._empty_lbl)
         scroll = ScrollView(size_hint_y=1)

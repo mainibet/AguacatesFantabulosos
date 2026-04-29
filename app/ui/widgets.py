@@ -90,16 +90,15 @@ class NoiseBar(Widget):
             Color(*BAR_BG)
             RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(9)])
 
-            # Stripe fill — clipped by drawing only up to fill width
+            # Stripe fill — rounded both sides
             fill_w = max(self.width * self._fill_pct, dp(4) if self._fill_pct > 0 else 0)
             if fill_w > 0:
                 Color(1, 1, 1, 1)
-                # Use stencil-free approach: draw rectangle with texture
-                # rounded left edge only when fill doesn't reach end
-                Rectangle(
-                    texture=_get_stripe_tex(),
+                RoundedRectangle(
                     pos=self.pos,
                     size=(fill_w, self.height),
+                    radius=[dp(9)],
+                    texture=_get_stripe_tex(),
                 )
 
             # Threshold marker
