@@ -9,22 +9,35 @@ Apr 27 - May 4
 First full cycle complete-sound sensor
 
 ### Tasks
-- [ ] Fix App
-- [ ] Connect App with BLE
+- [X] Fix App
+- [X] Implement BLE on device
+- [X] Connect App with BLE
 - [ ] Connect App with device
+- [X] Research about battery
 - [ ] First 3d printed prototype
-- [ ] Propose batter component
-- [ ] Seeds meeting
+- [X] Propose batter component
+- [X] Seeds meeting
 
 ### Review
 
 #### What worked
 - Having 2 microchips for testing
+- Device BLE working
+- Sound calibration made
+- Better understanding of battery need
 
 #### Problems
+- One device in C++ with improve calibration but not BLE yet
+- One device with MiPy with BLE not calibratino optmized yet
 
+#### Doubts
+- Not sure if the battery findings are correct
+- Not sure if make sense to test with the battery proposed and then move to anotherone if needed
+- What's the difference on using a battery component or use the parts?
+  
 #### Next steps
-
+- Learn about the I2S protocol for digital audio and how to receive audio from the microphone using it.
+- 
 ---
 
 ## Week NB
@@ -72,7 +85,7 @@ Calibrate correctly microphone
 
 
 ### Review
-- Decision made
+- Decision made (see [decisions](https://github.com/mainibet/AguacatesFantabulosos/blob/main/docs/decisions.md) and [review notes](https://github.com/mainibet/AguacatesFantabulosos/blob/main/docs/revewNotes.md) )
 
 #### What worked
 - Sound sensor is working
