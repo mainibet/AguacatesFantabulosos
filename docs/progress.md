@@ -13,6 +13,7 @@ First full cycle complete-sound sensor
 - [X] Implement BLE on device
 - [X] Connect App with BLE
 - [ ] Connect App with device
+- [X] Id battery selection criteria and possible battery
 - [X] Research about battery
 - [ ] First 3d printed prototype
 - [X] Propose batter component
@@ -28,19 +29,44 @@ First full cycle complete-sound sensor
 - Better understanding of battery need
 - App with BLE, test needs to be done
 - We check App workflow (PC app -> Android -> IOs)
+- ID possible workflow for battery: measure firmware -> test voltage -> test autonomy -> optimize it
 
 #### Problems
-- One device in C++ with improve calibration but not BLE yet
-- One device with MiPy with BLE not calibratino optmized yet
+- Kind of a reprocess:
+  - One device in C++ with improve calibration but not BLE yet
+  - One device with MiPy with BLE not calibratino optmized yet
+
+#### Next steps
+- Consume metrics for current services (battery related): sound and BLE
+- Implement light sensor (App + device)
+- Mock-up light service in the app
+- Include batery level in the app
+- Learn about the I2S protocol for digital audio and how to receive audio from the microphone using it.
+
 
 #### Doubts
+*App*
+- Does it make sense to have this app development? Desktop app -> Android -> IOs
+
+*Case*
+- Which sensors size we should consider?
+
+*Battery*
 - Not sure if the battery findings are correct
-- Not sure if make sense to test with the battery proposed and then move to anotherone if needed
+- Not sure if make sense to test with the battery proposed and then move to another one if needed, the size might not change significantly the size but it might impact the case size
 - What's the difference on using a battery component or use the parts?
-  
-#### Next steps
-- Learn about the I2S protocol for digital audio and how to receive audio from the microphone using it.
-- 
+- Which would be a better charging method? (USB, pogo pins, magnets)
+- Which is the relevant metrics we should implement for the battery?
+- **Shall we set a goal on this or is something we can see where we can get?** Which is a realistic goal? so we can measure consumption and test it. I understood we need this for the measures and future batter testing:
+  - Autonomy (hours/days before recharge)
+  - Power consumption profile (Active time, sleeping time, transmission time, BLE bursts).
+  - Current peak (starting and transmitting).
+  - Charging method (USB, pogo pins, magnet).
+- Do you have some tips regarding the power management? (peak and voltage).
+- Is there any recommendation to not mess-up the microchip, I read we can use the 5V pin + voltage regulator, is there something regarding the services development?
+I read we should limit the max peak for the battery.
+- Does these next steps make sense? measure firmware -> test voltage -> test autonomy -> optimize it
+
 ---
 
 ## Week NB
