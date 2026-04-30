@@ -1,6 +1,10 @@
 ## 30 Apr
 - Battery decision:
 - Battery implementation apporach:
+- Battery requirements:
+  - Small
+  - Autonomous
+  - Rechargable
   
 ## 17 Apr 
 - *Change microcontroller*: RP2040 to ESP32-C3 super mini
