@@ -17,6 +17,7 @@ First full cycle complete-sound sensor
 - [ ] First 3d printed prototype
 - [X] Propose batter component
 - [X] Seeds meeting
+- [X] Id possible App workflow
 
 ### Review
 
@@ -25,6 +26,8 @@ First full cycle complete-sound sensor
 - Device BLE working
 - Sound calibration made
 - Better understanding of battery need
+- App with BLE, test needs to be done
+- We check App workflow (PC app -> Android -> IOs)
 
 #### Problems
 - One device in C++ with improve calibration but not BLE yet
