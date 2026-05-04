@@ -2,7 +2,34 @@
 
 Total weeks: 13.3
 -----
-## Week NB
+## Week 6
+May 5 - 11
+
+### Goal
+Smt
+
+### Tasks
+- [ ] Define battery and voltage regulator
+- [ ] 3d printing refinement
+- [ ] Make 2 microchips into Micropython (BLE + calibration)
+- [ ] Implement metrics for the current services (battery focus)
+- [ ] ID what's need for the light sensor
+- [ ] App mock-up with light and battery service
+- [ ] Seeds meeting
+
+### Review
+
+#### What worked
+
+#### Problems
+
+#### Next steps
+- Update sound sensor still pending
+- Implement light sensor (App + device)
+- Learn about the I2S protocol for digital audio and how to receive audio from the microphone using it (if new sensor)
+---
+
+## Week 5
 Apr 27 - May 4
 
 ### Goal
@@ -12,10 +39,10 @@ First full cycle complete-sound sensor
 - [X] Fix App
 - [X] Implement BLE on device
 - [X] Connect App with BLE
-- [ ] Connect App with device
+- [X] Connect App with device
 - [X] Id battery selection criteria and possible battery
 - [X] Research about battery
-- [ ] First 3d printed prototype
+- [X] First 3d printed prototype
 - [X] Propose batter component
 - [X] Seeds meeting
 - [X] Id possible App workflow
@@ -69,7 +96,7 @@ I read we should limit the max peak for the battery.
 
 ---
 
-## Week NB
+## Week 4
 Apr 20 - 26
 
 ### Goal
@@ -111,7 +138,6 @@ Calibrate correctly microphone
 - [X] Mock-up app
 - [X] Identify what we need for the bluetooth
 - [X] Seeds meeting
-
 
 ### Review
 - Decision made (see [decisions](https://github.com/mainibet/AguacatesFantabulosos/blob/main/docs/decisions.md) and [review notes](https://github.com/mainibet/AguacatesFantabulosos/blob/main/docs/revewNotes.md) )
