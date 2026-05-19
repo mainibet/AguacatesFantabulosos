@@ -21,6 +21,16 @@ RATE     = 44100
 CHANNELS = 1
 
 # UI
-WINDOW_SIZE     = (420, 780)
+WINDOW_SIZE     = (400, 700)
 POLL_INTERVAL   = 0.15
 MAX_LOG_ENTRIES = 6
+
+# Light
+GOOD   = (0.18, 0.82, 0.48, 1)   # #2fd17a
+WARN   = (0.96, 0.65, 0.14, 1)   # #f5a623
+DANGER = (1.0,  0.31, 0.31, 1)   # #ff4f4f
+LIGHT_COLOR = (0.69, 0.77, 1.0, 1)  # #b0c4ff
+
+# Default light
+DEFAULT_THRESH_LIGHT    = 600   # lux
+DEFAULT_THRESH_CROWDNESS = 70   # %
