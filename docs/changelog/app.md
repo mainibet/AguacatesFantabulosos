@@ -1,5 +1,23 @@
 # Changelog (App)
 
+## v0.2 (current)
+Multi-sensor Kivy app with BLE integration
+
+### Added
+- BLE connection to ESP32-C3 with auto-reconnect
+- Real-time noise level display with configurable threshold
+- Light level monitoring via BLE (dark / medium / bright)
+- Crowd awareness card (dummy data)
+- Battery status with charge indicator and color coding
+- BLE message parser (`noise=72;light=1` format)
+- Connected / Disconnected badge in header
+
+### Changed
+- UI rebuilt in Kivy from HTML prototype
+- Project structure split into `services/` and `ui/` modules
+
+---
+
 ## v0.1
 Event UI prototype (HTML + Kivy layout concept) + threshold-based alerts (simulated)
 
