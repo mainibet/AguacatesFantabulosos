@@ -1,4 +1,11 @@
 # ═══════════════════════════════════════════
+# SOUND — ADC Bit Range Limits
+# ═══════════════════════════════════════════
+
+ADC_MIN_BIT = 0         # min abs value - equivalent to 0 V
+ADC_MAX_BIT = 65535     # max abs value - equivalente to 3.3V in 16bits scale
+
+# ═══════════════════════════════════════════
 # SOUND — traffic light
 # ═══════════════════════════════════════════
 SOUND_QUIET    = 500     # diff < QUIET   
