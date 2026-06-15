@@ -332,33 +332,44 @@ class RootLayout(BoxLayout):
         # Badge BLE
         self._update_ble_status()
 
-        # Batería
-        batt = self._battery.get()
-        self._batt_card.update(batt["percent"])
-
         # Crowdness dummy
         self._crowd_card.update(self._crowdness.update(), DEFAULT_THRESH_CROWDNESS)
 
         # BLE
-        if self._ble.last_alert:
-            msg = self._ble.last_alert
-            self._ble.last_alert = None
-            try:
-                data = self._ble.parse_ble(msg)
+        try:
+            # battery
+            if self._ble.last_bat:
+                pct = self._ble.parse_bat(self._ble.last_bat)
+                if pct is not None:
+                    self._last_known_bat = pct
+                    self._batt_card.update(pct)
+                self._ble.last_bat = None
+            elif hasattr(self, '_last_known_bat'):
+                pass 
+            else:
+                batt = self._battery.get()
+                self._batt_card.update(batt["percent"])
 
-                if "noise" in data:
-                    value = data["noise"]
-                    self._db_lbl.text = f"{value:.0f} dB"
-                    self._log_list.add_event(value)
-                    self._alerted = value > self._threshold
+            # noise
+            if self._ble.last_sound:
+                val = self._ble.parse_sound(self._ble.last_sound)
+                if val is not None:
+                    self._db_lbl.text = f"{val:.0f} dB"
+                    self._log_list.add_event(val)
+                    self._alerted = val > self._threshold
                     if self._alerted:
                         self._empty_lbl.opacity = 0
+                self._ble.last_sound = None
 
-                if "light" in data:
-                    self._light_card.update(data["light"], DEFAULT_THRESH_LIGHT)
+            # light
+            if self._ble.last_light:
+                level = self._ble.parse_light(self._ble.last_light)
+                if level is not None:
+                    self._light_card.update(level, mode='light')
+                self._ble.last_light = None
 
-            except Exception as e:
-                print("BLE parse error:", e)
+        except Exception as e:
+            print("BLE parse error:", e)
 
 
 class AwarenessApp(App):

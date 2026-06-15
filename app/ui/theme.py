@@ -32,5 +32,5 @@ DANGER = (1.0,  0.31, 0.31, 1)   # #ff4f4f
 LIGHT_COLOR = (0.69, 0.77, 1.0, 1)  # #b0c4ff
 
 # Default light
-DEFAULT_THRESH_LIGHT    = 600   # lux
+DEFAULT_THRESH_LIGHT    = 1   # lux
 DEFAULT_THRESH_CROWDNESS = 70   # %

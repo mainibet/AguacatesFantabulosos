@@ -10,5 +10,5 @@ class CrowdnessMonitor:
 
     def update(self):
         """Soft noise. Returns float 0–100."""
-        self._value = max(0.0, min(100.0, self._value + random.uniform(-4, 4)))
+        self._value = max(0.0, min(100.0, self._value + random.uniform(-1, 1)))
         return round(self._value, 1)

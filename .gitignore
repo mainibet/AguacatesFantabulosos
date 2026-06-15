@@ -8,6 +8,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+app/.cache/
 
 # heavy files from kivy-ios / toolchain
 .environment/
