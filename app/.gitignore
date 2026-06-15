@@ -1,3 +1,22 @@
-../.DS_Store
-.gitignore
+# py env
+.venv/
+venv/
+env/
+
+# py cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# hehavy files from kivy-ios / toolchain
+.environment/
+build/
+dist/
+/build/
+/dist/
+
+# tmp OS and editors files
 .DS_Store
+.idea/
+.vscode/
