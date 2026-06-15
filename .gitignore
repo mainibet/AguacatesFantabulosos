@@ -1,0 +1,22 @@
+# py env
+.venv/
+venv/
+env/
+
+# py Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# heavy files from kivy-ios / toolchain
+.environment/
+build/
+dist/
+/build/
+/dist/
+
+# tmp OS files and editors
+.DS_Store
+.idea/
+.vscode/
