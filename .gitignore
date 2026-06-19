@@ -5,6 +5,7 @@ env/
 
 # py Cache
 __pycache__/
+.pytest_cache/
 *.pyc
 *.pyo
 *.pyd
@@ -21,3 +22,9 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+.buildozer/
+bin/
+*.spec
+
+# Compilation for iOS
+myappwearable-ios/
