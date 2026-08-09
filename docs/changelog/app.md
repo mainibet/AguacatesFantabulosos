@@ -1,6 +1,24 @@
 # Changelog (App)
 
-## v0.2 (current)
+## v0.3 (current)
+Redesigned UI to match the Awareness Companion design reference
+
+### Added
+- Dashboard layout: status bar (connection + battery pills), header, three sensor cards and a recent-alerts section
+- Threshold slider per sensor, set directly on the sensor scale (light, crowdness, noise)
+- Recent alerts list and a full alert log popup (last 7 days)
+- Line-drawn (lucide-style) icons replacing emoji glyphs
+- Crowdness now estimates density from nearby BLE devices (ppl/m²) instead of dummy data
+
+### Changed
+- Color palette converted from the design's oklch tokens (dark indigo + mint/violet/sky tones)
+- Light level (dark/normal/bright) mapped to the design's lux scale
+- Event log is edge-triggered per sensor and records value + threshold
+- Comments translated to English and split into titled sections
+
+---
+
+## v0.2
 Multi-sensor Kivy app with BLE integration
 
 ### Added
@@ -31,7 +49,6 @@ Event UI prototype (HTML + Kivy layout concept) + threshold-based alerts (simula
 - No BLE yet
 
 **upcoming:**
-v0.2 → Kivy UI implementation + calibration display
-v0.3 → Local storage (SQLite event log)
-v0.4 → Device communication (Serial → BLE migration)
-v1.0 → Stable Bluetooth event system + multi-event support (noise/light/crowd)
+v0.4 → Local storage (SQLite event log)
+v0.5 → Device communication (threshold sync via BLE)
+v1.0 → Stable Bluetooth event system + real crowd sensor
