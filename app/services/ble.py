@@ -14,20 +14,53 @@ class BLEMonitor:
         self.last_sound = None
         self.last_bat   = None
         self.last_light = None
+        self._running   = False
+        self._thread    = None
+        self._pending   = None   # target device found by the scanner
 
     def start(self):
-        threading.Thread(
+        if self._thread is not None:
+            return
+        self._running = True
+        self._thread = threading.Thread(
             target=lambda: asyncio.run(self.run()),
             daemon=True
-        ).start()
+        )
+        self._thread.start()
+
+    def stop(self):
+        """Stop the scan/connect loop and wait for the thread to finish,
+        so the app can quit without crashing the interpreter."""
+        self._running = False
+        if self._thread is not None:
+            self._thread.join(timeout=3.0)
+            self._thread = None
+
+    # ─────────────────────────────────────────────
+    # SCANNER — wakes often so stop() returns quickly
+    # ─────────────────────────────────────────────
+    def _on_device(self, device, advertisement_data):
+        name = advertisement_data.local_name or "" if advertisement_data else ""
+        if name == "MyESP32C3_Sound" and self._pending is None:
+            self._pending = device
+
+    async def _find_device(self):
+        """Scan until the wearable advertises; returns the device or None."""
+        scanner = BleakScanner(detection_callback=self._on_device)
+        await scanner.start()
+        try:
+            while self._running and self._pending is None:
+                await asyncio.sleep(0.5)
+        finally:
+            await scanner.stop()
+        device, self._pending = self._pending, None
+        return device
 
     async def run(self):
-        while True:
+        while self._running:
             print("Scanning...")
-            device = await BleakScanner.find_device_by_name("MyESP32C3_Sound")
+            device = await self._find_device()
             if not device:
-                print("Not found, retrying...")
-                await asyncio.sleep(2)
                 continue
 
             print("Found device, connecting...")
@@ -55,7 +88,7 @@ class BLEMonitor:
                     await client.start_notify(CHAR_BAT_UUID,   on_bat)
                     await client.start_notify(CHAR_LIGHT_UUID, on_light)
 
-                    while True:
+                    while self._running:
                         await asyncio.sleep(1)
 
             except Exception as e:
@@ -79,7 +112,7 @@ class BLEMonitor:
 
     def parse_light(self, msg):
         # "LIGHT:DARK|Green|RAW:8000"
-        # Devuelve 0=dark, 1=normal, 2=bright
+        # Returns 0=dark, 1=normal, 2=bright
         try:
             status = msg.split("LIGHT:")[1].split("|")[0]
             return {"DARK": 0, "NORMAL": 1, "BRIGHT": 2}.get(status, -1)

@@ -1,381 +1,250 @@
-# main.py — AwarenessApp entry point
+# app/main.py — Awareness Wearable companion app (Kivy).
+#
+# Implements the "Awareness Companion" dashboard design. UI sections live in
+# ui/dashboard.py, primitives in ui/widgets.py, sensor/event data in
+# ui/data.py and device services in services/.
 
 from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.label import Label
-from kivy.uix.widget import Widget
-from kivy.uix.scrollview import ScrollView
 from kivy.clock import Clock
-from kivy.metrics import dp
 from kivy.core.window import Window
-from kivy.graphics import Color, RoundedRectangle, Line, Rectangle, Ellipse
-from kivy.core.text import LabelBase
+from kivy.metrics import dp
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.widget import Widget
 
-from ui.theme import (
-    ACCENT, TEXT, BORDER, BAR_BG, WINDOW_SIZE, POLL_INTERVAL,
-    DB_MIN, DB_MAX, DANGER, DEFAULT_THRESH_LIGHT, DEFAULT_THRESH_CROWDNESS
+from ui.theme import BG, WINDOW_SIZE, POLL_INTERVAL
+from ui.data import EventsStore, SENSORS, DEFAULT_THRESHOLDS, LIGHT_LEVEL_LUX
+from ui.dashboard import (
+    StatusBar, HeaderSection, SensorCard, RecentAlertsCard,
+    FooterLabel, FullLogModal,
 )
-from ui.widgets import Card, NoiseBar, LogList
-from services.ble       import BLEMonitor
-from services.battery   import BatteryMonitor
+from ui.widgets import AwarenessScrollView, Tooltip, keep_centered
+from services.ble import BLEMonitor
+from services.battery import BatteryMonitor
 from services.crowdness import CrowdnessMonitor
-from ui.dashboard       import BatteryCard, SensorMiniCard
 
-# Emoji en macOS
-LabelBase.register(
-    name='Emoji',
-    fn_regular='/System/Library/Fonts/Apple Color Emoji.ttc'
-)
 
-Window.clearcolor = (0.059, 0.067, 0.082, 1)
+Window.clearcolor = BG
 Window.size = WINDOW_SIZE
 
-PURPLE = (0.427, 0.176, 0.431, 1)
 
-def _pct(value):
-    return max(0.0, min(1.0, (value - DB_MIN) / (DB_MAX - DB_MIN)))
-
-
-class ThresholdSlider(Widget):
-    def __init__(self, min_val=40, max_val=100, value=75, **kwargs):
-        super().__init__(**kwargs)
-        self.size_hint_y = None
-        self.height = dp(40)
-        self.min_val = min_val
-        self.max_val = max_val
-        self._value = value
-        self.on_value_change = None
-        self._dragging = False
-        self.bind(pos=self._redraw, size=self._redraw)
-
-    @property
-    def value(self):
-        return self._value
-
-    def _track_x(self):
-        return self.x + dp(12)
-
-    def _track_w(self):
-        return self.width - dp(24)
-
-    def _thumb_x(self):
-        pct = (self._value - self.min_val) / (self.max_val - self.min_val)
-        return self._track_x() + pct * self._track_w()
-
-    def _redraw(self, *_):
-        self.canvas.clear()
-        cx      = self._thumb_x()
-        ty      = self.center_y
-        track_h = dp(6)
-        radius  = [track_h / 2]
-        thumb_r = dp(11)
-        with self.canvas:
-            Color(*BAR_BG)
-            RoundedRectangle(
-                pos=(self._track_x(), ty - track_h / 2),
-                size=(self._track_w(), track_h),
-                radius=radius
-            )
-            filled_w = cx - self._track_x()
-            if filled_w > 0:
-                Color(*PURPLE)
-                RoundedRectangle(
-                    pos=(self._track_x(), ty - track_h / 2),
-                    size=(filled_w, track_h),
-                    radius=radius
-                )
-            Color(*PURPLE)
-            Ellipse(pos=(cx - thumb_r, ty - thumb_r), size=(thumb_r * 2, thumb_r * 2))
-
-    def on_touch_down(self, touch):
-        if self.collide_point(*touch.pos):
-            self._dragging = True
-            self._update_from_touch(touch)
-            return True
-        return super().on_touch_down(touch)
-
-    def on_touch_move(self, touch):
-        if self._dragging:
-            self._update_from_touch(touch)
-            return True
-        return super().on_touch_move(touch)
-
-    def on_touch_up(self, touch):
-        if self._dragging:
-            self._dragging = False
-            return True
-        return super().on_touch_up(touch)
-
-    def _update_from_touch(self, touch):
-        pct = max(0.0, min(1.0, (touch.x - self._track_x()) / self._track_w()))
-        self._value = self.min_val + pct * (self.max_val - self.min_val)
-        if self.on_value_change:
-            self.on_value_change(self._value)
-        self._redraw()
-
-
-class RootLayout(BoxLayout):
+class RootLayout(FloatLayout):
+    """Wires the services to the dashboard sections and runs the poll loop."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.orientation = 'vertical'
-        self.padding = dp(16)
-        self.spacing = dp(0)
 
-        self._dot_count = 0
-        self._threshold = 75.0
-        self._alerted   = False
+        # ── State ──
+        self._thresholds = dict(DEFAULT_THRESHOLDS)
+        self._live = {s.id: None for s in SENSORS}
+        self._was_above = {s.id: False for s in SENSORS}
+        self._events = EventsStore()
+        self._events.seed_demo()
+        self._connected = False
+        self._connected_manual = False   # True after the user taps the pill
+        self._last_battery = None
 
-        self._battery   = BatteryMonitor()
+        # ── Services ──
+        self._battery = BatteryMonitor()
         self._crowdness = CrowdnessMonitor()
-        self._ble       = BLEMonitor()
+        self._crowdness.start()
+        self._ble = BLEMonitor()
         self._ble.start()
 
         self._build_ui()
         Clock.schedule_interval(self._tick, POLL_INTERVAL)
 
+    # ─────────────────────────────────────────────
+    # UI BUILD
+    # ─────────────────────────────────────────────
     def _build_ui(self):
+        # Scrollable page content
+        content = BoxLayout(orientation="vertical", size_hint_y=None,
+                            padding=[dp(20), dp(28), dp(20), dp(28)],
+                            spacing=dp(16))
+        content.bind(minimum_height=content.setter("height"))
+        scroll = AwarenessScrollView()
+        scroll.add_widget(content)
+        self.add_widget(scroll)
+        self._scroll = scroll
 
-        # 1. Header
-        header = BoxLayout(size_hint_y=None, height=dp(44))
+        # 1. Top row: app name at the top-left, status pills top-right
+        self._status_bar = StatusBar(on_toggle_connection=self._toggle_connection)
+        top_row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                            height=dp(56), spacing=dp(12))
+        top_row.add_widget(keep_centered(HeaderSection()))
+        top_row.add_widget(Widget())  # spacer pushes the pills to the right
+        top_row.add_widget(keep_centered(self._status_bar))
+        content.add_widget(top_row)
 
-        app_name = Label(
-            text="AwarenessApp",
-            font_size='18sp',
-            bold=True,
-            color=TEXT,
-            halign='left',
-            valign='middle',
-        )
-        app_name.bind(size=lambda w, s: setattr(w, 'text_size', s))
-        header.add_widget(app_name)
+        # 2. Sensor cards
+        self._cards = {}
+        for s in SENSORS:
+            card = SensorCard(sensor=s, on_threshold=self._on_threshold_change)
+            self._cards[s.id] = card
+            content.add_widget(card)
 
-        # badge = el pill de "CONNECTED" / "DISCONNECTED" arriba a la derecha
-        self._badge = Label(
-            text="CONNECTED",
-            font_size='12sp',
-            color=ACCENT,
-            size_hint=(None, None),
-            size=(dp(124), dp(30)),
-            halign='center',
-            valign='middle',
-        )
-        self._badge.text_size = (dp(124), dp(30))
+        # 3. Recent alerts
+        self._recent_card = RecentAlertsCard(on_open_log=self._open_log)
+        content.add_widget(self._recent_card)
 
-        with self._badge.canvas.before:
-            Color(*ACCENT)
-            self._badge_line = Line(
-                rounded_rectangle=(0, 0, dp(124), dp(30), dp(15)),
-                width=1.2
-            )
+        # 5. Footer
+        self._footer = FooterLabel()
+        content.add_widget(self._footer)
 
-        self._badge.bind(
-            pos=lambda w, _: setattr(
-                self._badge_line,
-                'rounded_rectangle',
-                (w.x, w.y, w.width, w.height, dp(15))
-            )
-        )
+        # Full alert log overlay (on top of the scrollable page)
+        self._modal = FullLogModal()
+        self.add_widget(self._modal)
 
-        header.add_widget(self._badge)
-        self.add_widget(header)
-
-        self.add_widget(Widget(size_hint_y=None, height=dp(14)))
-
-        # 2. Batería
-        self._batt_card = BatteryCard()
-        self.add_widget(self._batt_card)
-
-        self.add_widget(Widget(size_hint_y=None, height=dp(10)))
-
-        # 3. Luz + Crowdness
-        row = BoxLayout(size_hint_y=None, height=dp(90), spacing=dp(10))
-        self._light_card = SensorMiniCard("LIGHT", " lux")
-        self._crowd_card = SensorMiniCard("CROWDNESS", "%")
-        row.add_widget(self._light_card)
-        row.add_widget(self._crowd_card)
-        self.add_widget(row)
-
-        self.add_widget(Widget(size_hint_y=None, height=dp(10)))
-
-        # 4. Noise card
-        level_card = Card(size_hint_y=None, height=dp(152))
-
-        level_card.add_widget(Label(
-            text="CURRENT NOISE LEVEL",
-            font_size='15sp',
-            bold=True,
-            color=TEXT,
-            size_hint_y=None,
-            height=dp(22),
-            halign='center',
-            valign='middle',
-        ))
-
-        self._status_lbl = Label(
-            text="Waiting for BLE data...",
-            font_size='12sp',
-            color=(1, 1, 1, 0.6),
-            size_hint_y=None,
-            height=dp(18),
-            halign='center',
-            valign='middle',
-        )
-        level_card.add_widget(self._status_lbl)
-
-        self._db_lbl = Label(
-            text="-- dB",
-            font_size='22sp',
-            bold=True,
-            color=TEXT,
-            size_hint_y=None,
-            height=dp(36),
-            halign='center',
-            valign='middle',
-        )
-        level_card.add_widget(self._db_lbl)
-        self.add_widget(level_card)
-
-        self.add_widget(Widget(size_hint_y=None, height=dp(14)))
-
-        # 5. Threshold card
-        thresh_card = Card(size_hint_y=None, height=dp(134))
-
-        thresh_card.add_widget(Label(
-            text="THRESHOLD",
-            font_size='15sp',
-            bold=True,
-            color=TEXT,
-            size_hint_y=None,
-            height=dp(22),
-            halign='center',
-            valign='middle',
-        ))
-
-        self._slider = ThresholdSlider(min_val=40, max_val=100, value=75)
-        self._slider.on_value_change = self._on_slider
-        thresh_card.add_widget(self._slider)
-
-        self._thresh_lbl = Label(
-            text="75 dB",
-            font_size='22sp',
-            bold=True,
-            color=TEXT,
-            size_hint_y=None,
-            height=dp(36),
-            halign='center',
-            valign='middle',
-        )
-        thresh_card.add_widget(self._thresh_lbl)
-        self.add_widget(thresh_card)
-
-        self.add_widget(Widget(size_hint_y=None, height=dp(18)))
-
-        # 6. Log
-        log_box = BoxLayout(orientation='vertical', spacing=dp(6))
-
-        log_box.add_widget(Label(
-            text="EVENT LOG",
-            font_size='13sp',
-            bold=True,
-            color=TEXT,
-            size_hint_y=None,
-            height=dp(26),
-        ))
-
-        self._empty_lbl = Label(
-            text="No events yet.",
-            font_size='12sp',
-            color=(1, 1, 1, 0.4),
-            size_hint_y=None,
-            height=dp(32),
-        )
-        log_box.add_widget(self._empty_lbl)
-
-        scroll = ScrollView()
-        self._log_list = LogList()
-        scroll.add_widget(self._log_list)
-        log_box.add_widget(scroll)
-
-        self.add_widget(log_box)
+        # Hover tooltip (sensor hints), topmost layer
+        self._tooltip = Tooltip()
+        self.add_widget(self._tooltip)
+        Window.bind(mouse_pos=self._update_tooltip)
 
     # ─────────────────────────────────────────────
-    # BLE STATUS
+    # HOVER TOOLTIP — sensor hint over the sensor name
     # ─────────────────────────────────────────────
+    def _update_tooltip(self, window, pos):
+        if self._modal._open:
+            self._tooltip.hide()
+            return
+        # Convert the mouse to content coordinates (matches the slider
+        # capture path) and hit-test the sensor name labels
+        mx, my = self._scroll.to_local(*pos)
+        for card in self._cards.values():
+            rect = card.name_rect_content()
+            if rect and rect[0] <= mx <= rect[0] + rect[2] \
+                    and rect[1] <= my <= rect[1] + rect[3]:
+                self._tooltip.show(card.sensor.hint, *pos)
+                return
+        self._tooltip.hide()
 
-    def _update_ble_status(self):
+    # ─────────────────────────────────────────────
+    # THRESHOLDS AND EVENTS
+    # ─────────────────────────────────────────────
+    def _on_threshold_change(self, sensor_id, value):
+        self._thresholds[sensor_id] = value
+        self._refresh_cards()
+
+    def _check_crossing(self, sensor_id, value):
+        """Log an alert when the value rises above the threshold
+        (edge-triggered, so a sustained over-threshold reading logs once)."""
+        above = value >= self._thresholds[sensor_id]
+        if above and not self._was_above[sensor_id]:
+            self._events.add(sensor_id, value, self._thresholds[sensor_id])
+        self._was_above[sensor_id] = above
+
+    # ─────────────────────────────────────────────
+    # CONNECTION AND BATTERY
+    # ─────────────────────────────────────────────
+    def _toggle_connection(self):
+        self._connected = not self._connected
+        self._connected_manual = True
+
+    def _update_connection(self):
+        """A real BLE connection always wins; otherwise the demo toggle
+        the user tapped stands."""
         if self._ble.connected:
-            self._badge.text  = "CONNECTED"
-            self._badge.color = ACCENT
-        else:
-            self._badge.text  = "DISCONNECTED"
-            self._badge.color = DANGER
+            self._connected = True
+            self._connected_manual = False
+        elif not self._connected_manual:
+            self._connected = False
+        self._status_bar.set_connected(self._connected)
+        self._footer.set_connected(self._connected)
 
-    # ─────────────────────────────────────────────
-    # EVENTS
-    # ─────────────────────────────────────────────
-
-    def _on_slider(self, value):
-        self._threshold = value
-        self._thresh_lbl.text = f"{value:.0f} dB"
+    def _update_battery(self):
+        # Prefer the device reading, fall back to the OS battery
+        if self._ble.last_bat is not None:
+            parsed = self._ble.parse_bat(self._ble.last_bat)
+            self._ble.last_bat = None
+            if parsed is not None:
+                self._last_battery = parsed
+        pct = self._last_battery
+        if pct is None:
+            pct = self._battery.get()["percent"]
+        self._status_bar.set_battery(pct)
 
     # ─────────────────────────────────────────────
     # MAIN LOOP
     # ─────────────────────────────────────────────
-
     def _tick(self, dt):
+        # Connection status
+        self._update_connection()
 
-        # Dots animation
-        self._dot_count = (self._dot_count + 1) % 4
-        self._status_lbl.text = f"Waiting for BLE data{'.' * self._dot_count}"
+        # Battery
+        self._update_battery()
 
-        # Badge BLE
-        self._update_ble_status()
+        # Noise (BLE)
+        if self._ble.last_sound is not None:
+            val = self._ble.parse_sound(self._ble.last_sound)
+            self._ble.last_sound = None
+            if val is not None:
+                self._live["noise"] = float(val)
+                self._check_crossing("noise", float(val))
 
-        # Crowdness dummy
-        self._crowd_card.update(self._crowdness.update(), DEFAULT_THRESH_CROWDNESS)
+        # Light (BLE, three levels → lux)
+        if self._ble.last_light is not None:
+            level = self._ble.parse_light(self._ble.last_light)
+            self._ble.last_light = None
+            if level is not None and level in LIGHT_LEVEL_LUX:
+                lux = float(LIGHT_LEVEL_LUX[level])
+                self._live["light"] = lux
+                self._check_crossing("light", lux)
 
-        # BLE
-        try:
-            # battery
-            if self._ble.last_bat:
-                pct = self._ble.parse_bat(self._ble.last_bat)
-                if pct is not None:
-                    self._last_known_bat = pct
-                    self._batt_card.update(pct)
-                self._ble.last_bat = None
-            elif hasattr(self, '_last_known_bat'):
-                pass 
+        # Crowdness (BLE adjacency estimation)
+        crowd = self._crowdness.update()
+        if crowd is not None:
+            self._live["crowdness"] = crowd
+            self._check_crossing("crowdness", crowd)
+
+        # Refresh every card and the recent alert list
+        self._refresh_cards()
+        self._recent_card.set_events(self._events.recent(4))
+
+    def _refresh_cards(self):
+        for sid, card in self._cards.items():
+            card.set_threshold(self._thresholds[sid])
+            card.set_last_alert(self._events.last_for(sid))
+            if not self._connected:
+                card.set_status("no_signal")
+            elif self._events.is_recent_alert(sid, self._thresholds[sid]):
+                card.set_status("recent")
             else:
-                batt = self._battery.get()
-                self._batt_card.update(batt["percent"])
+                card.set_status("ok")
 
-            # noise
-            if self._ble.last_sound:
-                val = self._ble.parse_sound(self._ble.last_sound)
-                if val is not None:
-                    self._db_lbl.text = f"{val:.0f} dB"
-                    self._log_list.add_event(val)
-                    self._alerted = val > self._threshold
-                    if self._alerted:
-                        self._empty_lbl.opacity = 0
-                self._ble.last_sound = None
+    # ─────────────────────────────────────────────
+    # MODAL
+    # ─────────────────────────────────────────────
+    def _open_log(self):
+        self._modal.open(self._events.all())
 
-            # light
-            if self._ble.last_light:
-                level = self._ble.parse_light(self._ble.last_light)
-                if level is not None:
-                    self._light_card.update(level, mode='light')
-                self._ble.last_light = None
-
-        except Exception as e:
-            print("BLE parse error:", e)
+    # ─────────────────────────────────────────────
+    # SHUTDOWN — stop background services cleanly
+    # ─────────────────────────────────────────────
+    def stop_services(self):
+        """Stop every background thread so the interpreter exits without
+        crashing (macOS otherwise reports an unexpected quit)."""
+        self._crowdness.stop()
+        self._ble.stop()
 
 
 class AwarenessApp(App):
     def build(self):
         return RootLayout()
 
+    def on_request_close(self, *args):
+        """Always allow the window to close (red X) and trigger the clean
+        shutdown immediately."""
+        Clock.schedule_once(lambda dt: self.stop(), 0)
+        return False
+
+    def on_stop(self):
+        """Clean shutdown: join the BLE/crowdness threads before the
+        interpreter exits (prevents the macOS 'unexpectedly quit' dialog)."""
+        if self.root is not None:
+            self.root.stop_services()
+
 
 if __name__ == "__main__":
     AwarenessApp().run()
+    pass

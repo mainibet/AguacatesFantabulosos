@@ -13,7 +13,8 @@ def _rms_to_db(rms: float) -> float:
     """Convert linear RMS to dB, clamped to DB_MIN..DB_MAX."""
     if rms < 1e-6:
         return DB_MIN
-    db = 20 * np.log10(rms / 32768.0) + 100  # offset so silence ≈ DB_MIN
+    # Offset so full scale ≈ DB_MAX; silence then lands near DB_MIN
+    db = 20 * np.log10(rms / 32768.0) + 120
     return float(np.clip(db, DB_MIN, DB_MAX))
  
  

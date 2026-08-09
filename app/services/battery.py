@@ -20,7 +20,7 @@ class BatteryMonitor:
         elif system == "Windows":
             return self._windows()
         else:
-            # Android (Kivy) — usar plyer si está disponible
+            # Android (Kivy) — use plyer if available
             return self._plyer()
 
     def _linux(self):
