@@ -3,17 +3,18 @@
 ## 📌 Overview
 A modular wearable that monitors noise, light, and crowd levels to help you stay in control of your environment.
 
-## This version: v0.2 — Multi-sensor App (ESP32-C3 + Kivy)
+## This version: v0.3 — Awareness Companion design (ESP32-C3 + Kivy)
 
 This project reads analog sound signals using an ESP32-C3 Super Mini, broadcasts alerts via **Bluetooth Low Energy (BLE)** when the noise exceeds a configured threshold, and displays real-time data for noise, light, and crowd levels, along with battery status and configurable alert thresholds.
 
 ## Features
-- Noise detection
-- Event log with timestamped alerts
-- BLE notifications (status with auto-reconnect)
-- Battery status with charge indicator
-- Light sensitivity (BLE, 3 levels: dark / medium / bright)
-- Crowd awareness (dummy data)
+- Noise detection (BLE, dB)
+- Light sensitivity (BLE, 3 levels mapped to lux)
+- Crowd density estimated from nearby BLE devices (ppl/m²)
+- Threshold slider per sensor, set directly on the sensor scale
+- Recent alerts list + full alert log (last 7 days) in a bottom-sheet popup
+- Connection and battery status pills in the top bar
+- Event log with timestamped alerts (edge-triggered)
 
 ## 📦 Prerequisites
 
@@ -91,16 +92,19 @@ project/
 ├── docs/
 │
 ├── app/                        ← Kivy companion app
-│   ├── main.py
+│   ├── main.py                 ← App + RootLayout wiring and poll loop
 │   ├── requirements.txt
 │   ├── services/
-│   │   ├── ble.py              ← BLE connection + parser
+│   │   ├── ble.py              ← BLE connection + message parser
 │   │   ├── battery.py          ← OS battery monitor
-│   │   └── crowdness.py        ← Crowd dummy data
+│   │   ├── crowdness.py        ← Crowd density from nearby BLE devices
+│   │   └── audio.py            ← Microphone capture + dB calculation
 │   └── ui/
-│       ├── theme.py            ← Colors and constants
-│       ├── widgets.py          ← Card, NoiseBar, LogList
-│       └── dashboard.py        ← BatteryCard, SensorMiniCard
+│       ├── theme.py            ← Design tokens (palette, radii, typography)
+│       ├── data.py             ← Sensor registry + event log + formatters
+│       ├── icons.py            ← Line-drawn (lucide-style) icons
+│       ├── widgets.py          ← Card, Pill, IconTile, ThresholdSlider, Modal
+│       └── dashboard.py        ← StatusBar, Header, SensorCard, alert lists
 │
 └── firmware/                   ← ESP32-C3 MicroPython
 ├── main.py
@@ -112,7 +116,8 @@ project/
 - 📈 [Progress](docs/progress.md)
 
 ## Versions
-- current v0.2 — Multi-sensor Kivy app (current)
+- current v0.3 — Awareness Companion design (current)
+- v0.2 — Multi-sensor Kivy app with BLE
 - v0.1 — Noise-only BLE prototype
 Full changelog: [changelog](docs/changelog.md)
 
