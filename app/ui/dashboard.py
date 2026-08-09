@@ -1,211 +1,421 @@
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.label import Label
+# ui/dashboard.py — Page sections for the Awareness Companion dashboard.
+#
+# Composes the primitives from ui/widgets.py into the page sections shown
+# in the design (status bar, header, sensor cards, recent alerts, log modal).
+# All data logic lives in ui/data.py and the services.
+
 from kivy.metrics import dp
-from kivy.graphics import Color, RoundedRectangle
-from ui.theme import TEXT, GOOD, WARN, DANGER
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.label import Label
+from kivy.uix.widget import Widget
+
+from ui.theme import (
+    alpha, TEXT, MUTED, BORDER, SECONDARY, MINT, AMBER,
+    FONT_LABEL, FONT_CAPTION, RADIUS_TILE,
+)
+from ui.data import TONE_COLORS, SENSOR_BY_ID, format_value, format_when, format_exact
+from ui.icons import IconWidget
+from ui.widgets import (
+    RoundedCard, Pill, IconTile, ThresholdSlider, EventRow, Modal,
+    BatteryGlyph, Divider, autosize, keep_centered, TRACK_INSET,
+)
 
 
-def _batt_color(pct):
-    if pct > 50: 
-        return GOOD
-    if pct > 20: 
-        return WARN
-    return DANGER
+# ─────────────────────────────────────────────
+# STATUS BAR — connection toggle + battery level pills
+# ─────────────────────────────────────────────
+class StatusBar(BoxLayout):
+    """Top-right pill row: connection toggle and battery level."""
+
+    def __init__(self, on_toggle_connection=None, **kwargs):
+        super().__init__(**kwargs)
+        self.size_hint = (None, None)
+        self.height = dp(36)
+        self.spacing = dp(8)
+        self.orientation = "horizontal"
+        self._on_toggle_connection = on_toggle_connection
+
+        # Cached glyphs reused across pill updates
+        self._bt_on = IconWidget(name="bluetooth", color=MINT,
+                                 size=(dp(14), dp(16)))
+        self._bt_off = IconWidget(name="bluetooth", color=MUTED,
+                                  size=(dp(14), dp(16)))
+        self._bat_glyph = BatteryGlyph(pct=62, color=MINT)
+
+        self._connect_pill = Pill(text="Connected", icon=self._bt_on,
+                                  fg=MINT, bg=alpha(MINT, 0.12),
+                                  ring=alpha(MINT, 0.35))
+        self._connect_pill.on_press = self._toggle
+        self.add_widget(self._connect_pill)
+
+        self._battery_pill = Pill(text="--%", icon=self._bat_glyph,
+                                  fg=TEXT, bg=SECONDARY, ring=BORDER)
+        self.add_widget(self._battery_pill)
+        self._fit()
+
+        self._connected_state = None
+        self._battery_state = None
+
+    def add_widget(self, widget, *args, **kwargs):
+        super().add_widget(widget, *args, **kwargs)
+        widget.bind(size=self._fit)
+
+    def _fit(self, *_):
+        """Keep the bar exactly as wide as its pills so the battery pill
+        never overflows the window edge."""
+        width = sum(c.width for c in self.children)
+        if len(self.children) > 1:
+            width += self.spacing * (len(self.children) - 1)
+        if self.width != width:
+            self.width = width
+
+    def _toggle(self):
+        if self._on_toggle_connection:
+            self._on_toggle_connection()
+
+    def set_connected(self, connected):
+        """Show the connection pill in its connected / disconnected state."""
+        if connected == self._connected_state:
+            return
+        self._connected_state = connected
+        if connected:
+            self._connect_pill.set(text="Connected", fg=MINT,
+                                   bg=alpha(MINT, 0.12), ring=alpha(MINT, 0.35),
+                                   icon=self._bt_on)
+        else:
+            self._connect_pill.set(text="Disconnected", fg=MUTED,
+                                   bg=SECONDARY, ring=BORDER, icon=self._bt_off)
+
+    def set_battery(self, pct):
+        """Show the battery level pill; pct < 0 renders as 'N/A'."""
+        if pct is not None and pct < 0:
+            pct = None
+        if pct == self._battery_state:
+            return
+        self._battery_state = pct
+        if pct is None:
+            self._bat_glyph.update(0, AMBER)
+            self._battery_pill.set(text="N/A", fg=MUTED, bg=SECONDARY,
+                                   ring=BORDER, icon=self._bat_glyph)
+            return
+        color = MINT if pct > 20 else AMBER
+        self._bat_glyph.update(pct, color)
+        self._battery_pill.set(text=f"{pct:.0f}%", fg=TEXT, bg=SECONDARY,
+                               ring=BORDER, icon=self._bat_glyph)
 
 
-class BatteryCard(BoxLayout):
+# ─────────────────────────────────────────────
+# HEADER — "Awareness / Wearable" title at the top-left corner
+# ─────────────────────────────────────────────
+class HeaderSection(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.orientation = 'vertical'
-        self.size_hint_y = None
-        self.height = dp(72)
-        self.padding = dp(4)
-
-        # Contenedor interno que simula el recuadro estético
-        inner = BoxLayout(
-            orientation='horizontal', 
-            spacing=dp(10),
-            padding=[dp(12), dp(8), dp(12), dp(8)]
-        )
-
-        # Dibujamos el recuadro de fondo (Card) en el canvas del contenedor interno
-        with inner.canvas.before:
-            Color(0.118, 0.133, 0.161, 1)  # Color gris oscuro de la tarjeta
-            self._bg_rect = RoundedRectangle(pos=inner.pos, size=inner.size, radius=[dp(8)])
-        
-        # Vincular cambios de tamaño/posición para que el fondo se adapte de forma dinámica
-        inner.bind(pos=self._update_rect, size=self._update_rect)
-
-        # Icono con el tamaño de fuente original (16sp)
-        self._icon = Label(
-            text="🔋", font_size='16sp', font_name='Emoji',
-            size_hint=(None, 1), width=dp(28),
-            halign='center', valign='middle'
-        )
-        self._icon.bind(size=lambda w, s: setattr(w, 'text_size', s))
-
-        info = BoxLayout(orientation='vertical', spacing=dp(2))
-
-        self._pct_lbl = Label(
-            text="-- %", font_size='16sp', bold=True,
-            color=TEXT, halign='left', valign='middle'
-        )
-        self._pct_lbl.bind(size=lambda w, s: setattr(w, 'text_size', s))
-
-        self._status = Label(
-            text="Reading...", font_size='12sp',
-            color=GOOD, halign='left', valign='middle'
-        )
-        self._status.bind(size=lambda w, s: setattr(w, 'text_size', s))
-
-        info.add_widget(self._pct_lbl)
-        info.add_widget(self._status)
-        inner.add_widget(self._icon)
-        inner.add_widget(info)
-        self.add_widget(inner)
-
-    def _update_rect(self, instance, value):
-        """Mantiene el fondo alineado con las dimensiones del contenedor"""
-        self._bg_rect.pos = instance.pos
-        self._bg_rect.size = instance.size
-
-    def update(self, pct):
-        if pct < 0:
-            self._pct_lbl.text = "N/A"
-            self._status.text = "No data"
-            self._status.color = WARN
-            return
-
-        color = _batt_color(pct)
-        self._pct_lbl.text = f"{pct:.0f}%"
-        self._status.color = color
-
-        # Control dinámico de emojis y estados sin operadores ternarios
-        if pct > 50:
-            self._icon.text = "🔋"
-            self._status.text = "Good"
-        else:
-            if pct > 20:
-                self._icon.text = "🪫"
-                self._status.text = "Charge soon"
-            else:
-                self._icon.text = "⚠️"
-                self._status.text = "Low — charge now"
+        self.orientation = "vertical"
+        self.size_hint = (None, None)
+        self.height = dp(56)
+        title = Label(text="Awareness\n[b]Wearable[/b]", markup=True,
+                      font_size='20sp', color=TEXT,
+                      size_hint=(None, None), valign="middle")
+        # Size the label to its text and the header to the label, so the
+        # title starts at the same left offset as the sensor cards
+        title.bind(texture_size=lambda w, s: setattr(w, "size", s))
+        self.add_widget(keep_centered(title))
+        self.width = title.width
+        title.bind(size=lambda w, s: setattr(self, "width", w.width))
 
 
-# Diccionarios de estados para mapeo limpio
-LIGHT_LABELS = {
-    0: ("🌑", "Dark", GOOD),
-    1: ("🌤", "Normal", WARN),
-    2: ("☀️", "Bright", DANGER),
-}
-
-CROWD_LABELS = {
-    'low': ("🟢", "Quiet", GOOD),
-    'medium': ("🟡", "Moderate", WARN),
-    'high': ("🔴", "Crowded", DANGER),
-}
-
-
-class SensorMiniCard(BoxLayout):
-    def __init__(self, title, mode='number', unit='', **kwargs):
+# ─────────────────────────────────────────────
+# SENSOR CARD — icon + hint, status pill, threshold slider on the scale,
+# live reading and the last alert caption
+# ─────────────────────────────────────────────
+class SensorCard(RoundedCard):
+    def __init__(self, sensor, on_threshold=None, **kwargs):
         super().__init__(**kwargs)
-        self.orientation = 'vertical'
-        self.size_hint_y = None
-        self.height = dp(100)
-        self.padding = dp(8)
-        self._mode = mode
-        self._unit = unit
+        self._sensor = sensor
+        self.sensor = sensor  # public for the hover tooltip
+        self._on_threshold = on_threshold
+        self._status_state = None
+        self.spacing = dp(10)
+        tone = TONE_COLORS[sensor.tone]
 
-        # Añadimos un fondo estético individual a cada mini tarjeta de sensor
-        with self.canvas.before:
-            Color(0.118, 0.133, 0.161, 1)
-            self._bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(8)])
-        self.bind(pos=self._update_rect, size=self._update_rect)
+        # ── Top row: icon tile + name/hint, status pill on the right ──
+        top = BoxLayout(orientation="horizontal", size_hint_y=None,
+                        height=dp(56), spacing=dp(12))
+        tile = IconTile(icon=sensor.icon, tone=tone, size=44,
+                        radius=RADIUS_TILE)
+        top.add_widget(keep_centered(tile))
 
-        self._title_lbl = Label(
-            text=title, font_size='10sp', color=(1, 1, 1, 0.5),
-            size_hint_y=None, height=dp(16),
-            halign='left', valign='middle'
-        )
-        self._title_lbl.bind(size=lambda w, s: setattr(w, 'text_size', s))
+        names = BoxLayout(orientation="vertical")
+        name = autosize(Label(text=sensor.label, font_size=FONT_LABEL,
+                              color=TEXT, bold=True, size_hint=(None, None)))
+        names.add_widget(name)
+        top.add_widget(names)
+        # Sensor name hover target (the hint text shows as a tooltip)
+        self._name_lbl = name
 
-        self._val_lbl = Label(
-            text="--", font_size='18sp', bold=True,
-            color=TEXT, size_hint_y=None, height=dp(30),
-            halign='left', valign='middle', font_name='Emoji'
-        )
-        self._val_lbl.bind(size=lambda w, s: setattr(w, 'text_size', s))
+        def _align_name(*_):
+            # Vertically center the sensor name on the icon tile. A vertical
+            # BoxLayout stacks its single child from the bottom, so the
+            # offset must be applied as bottom padding.
+            icon_cy = tile.center_y
+            offset = max(0.0, icon_cy - name.height / 2 - names.y)
+            names.padding = [0, 0, 0, offset]
 
-        self._status = Label(
-            text="—", font_size='13sp', color=(1, 1, 1, 0.5),
-            size_hint_y=None, height=dp(22),
-            halign='left', valign='middle'
-        )
-        self._status.bind(size=lambda w, s: setattr(w, 'text_size', s))
+        name.bind(height=lambda w, h: _align_name())
+        top.bind(pos=lambda w, p: _align_name())
+        top.bind(size=lambda w, s: _align_name())
 
-        self.add_widget(self._title_lbl)
-        self.add_widget(self._val_lbl)
-        self.add_widget(self._status)
+        # Status pill icons are cached and swapped through Pill.set()
+        self._icon_alert = IconWidget(name="alert", color=AMBER,
+                                      size=(dp(14), dp(14)))
+        self._icon_ok = IconWidget(name="check", color=MINT,
+                                   size=(dp(14), dp(14)))
+        self._status_pill = Pill(text="No alerts", icon=self._icon_ok,
+                                 fg=MINT, bg=alpha(MINT, 0.12),
+                                 ring=alpha(MINT, 0.30))
+        top.add_widget(keep_centered(self._status_pill))
+        self.add_widget(top)
 
-    def _update_rect(self, instance, value):
-        self._bg_rect.pos = instance.pos
-        self._bg_rect.size = instance.size
+        # ── Slider drawn on the sensor scale ──
+        self._slider = ThresholdSlider(min_val=sensor.min, max_val=sensor.max,
+                                       step=sensor.step,
+                                       value=sensor.default_threshold, tone=tone)
+        self._slider.on_value_change = self._on_slider
+        self.add_widget(self._slider)
 
-    def update(self, value, threshold=None, mode=None):
-        if value is None:
-            self._val_lbl.text = "--"
-            self._status.text = "—"
-            return
+        # ── Scale row: min · set value · max, all on the track line ──
+        self._min_lbl = autosize(Label(
+            text=format_value(sensor.id, sensor.min), font_size=FONT_CAPTION,
+            color=MUTED, size_hint=(None, None)))
+        self._value_lbl = autosize(Label(text="", font_size='14sp', color=TEXT,
+                                         bold=True, size_hint=(None, None)))
+        self._unit_lbl = autosize(Label(text="", font_size='12sp',
+                                        color=MUTED, size_hint=(None, None)))
+        self._max_lbl = autosize(Label(
+            text=format_value(sensor.id, sensor.max), font_size=FONT_CAPTION,
+            color=MUTED, size_hint=(None, None)))
+        value_group = BoxLayout(orientation="horizontal", spacing=dp(4),
+                                size_hint=(None, None))
+        value_group.add_widget(self._value_lbl)
+        value_group.add_widget(self._unit_lbl)
+        self._value_group = value_group
 
-        m = mode
-        if m is None:
-            m = self._mode
+        scale_row = FloatLayout(size_hint_y=None, height=dp(18))
+        scale_row.add_widget(self._min_lbl)
+        scale_row.add_widget(value_group)
+        scale_row.add_widget(self._max_lbl)
 
-        if m == 'light':
-            icon, label, color = LIGHT_LABELS.get(int(value), ("?", "Unknown", WARN))
-            self._val_lbl.text = f"{icon}  {label}"
-            if value >= 2:
-                self._status.text = "Too bright"
-                self._status.color = DANGER
-            else:
-                self._status.text = "OK"
-                self._status.color = GOOD
+        def _layout_scale(*_):
+            # Place min / set value / max along the slider track, with the
+            # set value always centered between the two scale ends
+            track_x = scale_row.x + dp(TRACK_INSET)
+            track_w = scale_row.width - dp(TRACK_INSET) * 2
+            self._min_lbl.y = scale_row.y + (scale_row.height
+                                             - self._min_lbl.height) / 2
+            self._min_lbl.x = track_x
+            value_group.pos = (track_x + track_w / 2 - value_group.width / 2,
+                               scale_row.y + (scale_row.height
+                                              - value_group.height) / 2)
+            self._max_lbl.y = scale_row.y + (scale_row.height
+                                             - self._max_lbl.height) / 2
+            self._max_lbl.x = track_x + track_w - self._max_lbl.width
 
+        def _fit_group(*_):
+            # Size the group to its labels, then re-position on the track
+            value_group.width = (self._value_lbl.width + self._unit_lbl.width
+                                 + value_group.spacing)
+            value_group.height = max(self._value_lbl.height,
+                                     self._unit_lbl.height)
+            _layout_scale()
+
+        self._layout_scale = _layout_scale
+        self._value_lbl.bind(size=_fit_group)
+        self._unit_lbl.bind(size=_fit_group)
+        self._min_lbl.bind(size=_fit_group)
+        self._max_lbl.bind(size=_fit_group)
+        scale_row.bind(pos=_layout_scale, size=_layout_scale)
+        self.add_widget(scale_row)
+        _fit_group()
+
+        # ── Last alert caption ──
+        self._last_lbl = Label(text="No alerts recorded yet",
+                               font_size=FONT_CAPTION, color=MUTED,
+                               size_hint_y=None, height=dp(16), halign="left")
+        self.add_widget(self._last_lbl)
+
+        self.set_threshold(sensor.default_threshold)
+
+    # ── Slider callback ──
+    def _on_slider(self, value):
+        self.set_threshold(value)
+        if self._on_threshold:
+            self._on_threshold(self._sensor.id, value)
+
+    # ── Public update API (called by the app loop) ──
+    def name_rect_content(self):
+        """Rect of the sensor name in the scroll-content coordinates
+        (the space the scrollview's to_local() produces), or None."""
+        lbl = self._name_lbl
+        if lbl is None or lbl.width == 0:
+            return None
+        return (lbl.x, lbl.y, lbl.width, lbl.height)
+
+    def set_threshold(self, value):
+        self._slider.set_value(value)
+        self._value_lbl.text = f"{value:g}"
+        self._unit_lbl.text = self._sensor.unit
+        self._layout_scale()
+
+    def set_last_alert(self, event):
+        if event is None:
+            self._last_lbl.text = "No alerts recorded yet"
         else:
-            if m == 'crowd':
-                pct = float(value)
-                if pct < 40:
-                    key = 'low'
-                else:
-                    if pct < 70:
-                        key = 'medium'
-                    else:
-                        key = 'high'
-                icon, label, color = CROWD_LABELS[key]
-                self._val_lbl.text = f"{icon}  {label}"
-                self._status.text = f"{pct:.0f}%"
-                self._status.color = color
+            self._last_lbl.text = (
+                f"Last alert: {format_value(self._sensor.id, event.value)}"
+                f" · {format_when(event.at)}"
+            )
 
-            else:  # Modo numérico estándar
-                self._val_lbl.text = f"{value:.0f}{self._unit}"
-                
-                # Determinación de alertas sin ternarios
-                exceeded = False
-                near = False
-                if threshold:
-                    if value > threshold:
-                        exceeded = True
-                    if value > (threshold * 0.85):
-                        near = True
+    def set_status(self, state):
+        """state: 'ok' (no alerts), 'recent' (alert within the hour) or
+        'no_signal' (device disconnected)."""
+        if state == self._status_state:
+            return
+        self._status_state = state
+        if state == "recent":
+            self._status_pill.opacity = 1
+            self._status_pill.set(text="Recent alert", fg=AMBER,
+                                  bg=alpha(AMBER, 0.15),
+                                  ring=alpha(AMBER, 0.35), icon=self._icon_alert)
+        elif state == "no_signal":
+            # No pill while disconnected: the connection pill in the top
+            # bar already carries that state
+            self._status_pill.opacity = 0
+        else:
+            self._status_pill.opacity = 1
+            self._status_pill.set(text="No alerts", fg=MINT,
+                                  bg=alpha(MINT, 0.12),
+                                  ring=alpha(MINT, 0.30), icon=self._icon_ok)
 
-                if exceeded:
-                    self._status.text = "⚠ Alert"
-                    self._status.color = DANGER
-                else:
-                    if near:
-                        self._status.text = "Near limit"
-                        self._status.color = WARN
-                    else:
-                        self._status.text = "Normal"
-                        self._status.color = GOOD
+
+# ─────────────────────────────────────────────
+# RECENT ALERTS CARD — heading, 'View full week' button and alert rows
+# ─────────────────────────────────────────────
+class RecentAlertsCard(RoundedCard):
+    def __init__(self, on_open_log=None, **kwargs):
+        super().__init__(**kwargs)
+        self._on_open_log = on_open_log
+        self.spacing = dp(8)
+
+        head = BoxLayout(orientation="horizontal", size_hint_y=None,
+                         height=dp(40), spacing=dp(8))
+        head.add_widget(keep_centered(autosize(Label(
+            text="RECENT ALERTS", font_size='13sp', bold=True, color=MUTED,
+            size_hint=(None, None)))))
+        head.add_widget(Widget())  # spacer
+        self._history_icon = IconWidget(name="history", color=TEXT,
+                                        size=(dp(14), dp(14)))
+        self._week_btn = Pill(text="View full week", fg=TEXT, bg=SECONDARY,
+                              ring=BORDER, height=36, icon=self._history_icon)
+        self._week_btn.on_press = self._open_log
+        head.add_widget(keep_centered(self._week_btn))
+        self.add_widget(head)
+
+        self._rows = BoxLayout(orientation="vertical", size_hint_y=None,
+                               spacing=dp(8))
+        self._rows.bind(minimum_height=self._rows.setter("height"))
+        self.add_widget(self._rows)
+        self.set_events([])
+
+    def _open_log(self):
+        if self._on_open_log:
+            self._on_open_log()
+
+    def set_events(self, events):
+        """Rebuild the visible rows (the design shows the four newest alerts)."""
+        self._rows.clear_widgets()
+        if not events:
+            self._rows.add_widget(Label(text="No alerts yet",
+                                        font_size=FONT_CAPTION, color=MUTED,
+                                        size_hint_y=None, height=dp(36),
+                                        halign="center"))
+            return
+        for i, event in enumerate(events):
+            if i:
+                self._rows.add_widget(Divider())
+            self._rows.add_widget(EventRow(
+                sensor=SENSOR_BY_ID[event.sensor], event=event,
+                when_text=format_when(event.at)))
+
+
+# ─────────────────────────────────────────────
+# FOOTER — last-sync note
+# ─────────────────────────────────────────────
+class FooterLabel(Label):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.text = "Awareness Wearable · last sync moments ago"
+        self.font_size = FONT_CAPTION
+        self.color = MUTED
+        self.size_hint_y = None
+        self.height = dp(28)
+        self.halign = "center"
+        self.valign = "middle"
+        self.bind(size=lambda w, s: setattr(w, "text_size", s))
+
+    def set_connected(self, connected):
+        self.text = ("Awareness Wearable · last sync moments ago"
+                     if connected else "Awareness Wearable · last sync 2 h ago")
+
+
+# ─────────────────────────────────────────────
+# FULL LOG MODAL — bottom sheet with the complete alert history
+# ─────────────────────────────────────────────
+class FullLogModal(Modal):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # Header: title + subtitle on the left, close button on the right
+        title_col = BoxLayout(orientation="vertical", spacing=dp(1))
+        title_col.add_widget(autosize(Label(text="Full alert log",
+                                            font_size=FONT_LABEL, color=TEXT,
+                                            bold=True, size_hint=(None, None))))
+        title_col.add_widget(autosize(Label(text="Last 7 days",
+                                            font_size=FONT_CAPTION, color=MUTED,
+                                            size_hint=(None, None))))
+        self._header.add_widget(keep_centered(title_col))
+        self._header.add_widget(Widget())  # spacer
+        self._close_icon = IconWidget(name="close", color=TEXT,
+                                      size=(dp(16), dp(16)))
+        self._close_btn = Pill(text="", icon=self._close_icon, fg=TEXT,
+                               bg=SECONDARY, ring=BORDER, height=40)
+        self._close_btn.on_press = self.close
+        self._header.add_widget(keep_centered(self._close_btn))
+
+        self._rows = BoxLayout(
+            orientation="vertical", size_hint_y=None,
+            # Same margins/padding as the recent-log rows on the page
+            padding=[dp(16), dp(14), dp(16), dp(14)],
+            spacing=dp(8))
+        self._rows.bind(minimum_height=self._rows.setter("height"))
+        self._content.add_widget(self._rows)
+
+    def open(self, events):
+        self.set_events(events)
+        super().open()
+
+    def set_events(self, events):
+        """Rebuild the full log rows with exact timestamps."""
+        self._rows.clear_widgets()
+        if not events:
+            self._rows.add_widget(Label(text="No alerts yet",
+                                        font_size=FONT_CAPTION, color=MUTED,
+                                        size_hint_y=None, height=dp(36),
+                                        halign="center"))
+            return
+        for i, event in enumerate(events):
+            if i:
+                self._rows.add_widget(Divider())
+            self._rows.add_widget(EventRow(
+                sensor=SENSOR_BY_ID[event.sensor], event=event,
+                when_text=format_exact(event.at)))
