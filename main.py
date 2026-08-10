@@ -6,12 +6,16 @@ import bluetooth
 import utime
 import gc #garbage collector (clean up RAM)
 from machine import ADC, Pin
+import network        # To activate WIFI radio
+import esp32          # To activate sniffer mode
+import hashlib        # To hash MAC addr
 
 # ------------------------
 # CONFIG BATTERY
 # ------------------------
 # initialize battery pin GPIO 3
-bat_adc = ADC(Pin(3))
+# bat_adc = ADC(Pin(3))
+bat_adc = ADC(Pin(config.BAT_GPIO_PIN))
 bat_adc.atten(ADC.ATTN_11DB)
 
 # ------------------------
@@ -20,8 +24,44 @@ bat_adc.atten(ADC.ATTN_11DB)
 
 #11dB (decibels) enable the pin to read full 0-3.3V range, not only 1.0V. (KY-037 delivers 3.3V)
 #
-mic = ADC(0)
+# mic = ADC(0)
+mic = ADC(Pin(config.MIC_GPIO))
 mic.atten(ADC.ATTN_11DB)
+
+# ------------------------
+# CONFIG LIGHT
+# ------------------------
+# light_adc = ADC(1)
+light_adc = ADC(Pin(config.LIGHT_GPIO))
+light_adc.atten(ADC.ATTN_11DB)
+
+# ------------------------
+# CONFIG CROWDNESS (WI-FI SNIFFER)
+# ------------------------
+
+# Activate WIFI to listen
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+
+# To store hased addr
+seen_hashes = set()
+
+def wifi_sniffer_callback(pkt):
+    """Detecting crowdness ..."""
+    if len(pkt) < 24:
+        return  # Discard corrupted packets or packets shorter than the 802.11 header
+
+    # Check if it is a 'Probe Request' (0x40) management frame
+    frame_control = pkt[0]
+    if (frame_control & 0xFC) == 0x40:
+        mac_bytes = pkt[10:16]  # Extract the 6 bytes from the source MAC address
+        
+        # Random MAC filter: bit 1 of the first octet enabled indicates local administration (Smartphones)
+        first_byte = mac_bytes[0]
+        if bool(first_byte & 0x02):
+            # Immediate anonymization with SHA-256 (MAC is not saved in plain text)
+            mac_hash = hashlib.sha256(mac_bytes).digest()
+            seen_hashes.add(mac_hash)
 
 # ------------------------
 # CONFIG BLE
@@ -31,6 +71,10 @@ mic.atten(ADC.ATTN_11DB)
 SERVICE_UUID = bluetooth.UUID("12345678-1234-5678-1234-567812345678")
 # Sound mail
 CHAR_UUID    = bluetooth.UUID("87654321-4321-8765-4321-876543214321")
+# Light mail
+CHAR_LIGHT_UUID = bluetooth.UUID("87654321-4321-8765-4321-876543214323")
+# Crwod mail
+CHAR_CROWD_UUID = bluetooth.UUID("87654321-4321-8765-4321-876543214324")
 # Battery mail
 CHAR_BAT_UUID = bluetooth.UUID("87654321-4321-8765-4321-876543214322")
 
@@ -46,7 +90,10 @@ service = aioble.Service(SERVICE_UUID)
 
 # sound service
 char = aioble.Characteristic(service, CHAR_UUID, read=True, notify=True)
-
+# light service
+char_light = aioble.Characteristic(service, CHAR_LIGHT_UUID, read=True, notify=True)
+# crowd service
+char_crowd = aioble.Characteristic(service, CHAR_CROWD_UUID, read=True, notify=True)
 # battery service
 char_bat = aioble.Characteristic(service, CHAR_BAT_UUID, read=True, notify=True)
 
@@ -78,6 +125,23 @@ def get_noise_status(amplitude):
         return "NORMAL", "Yellow"
     else:
         return "LOUD", "Red"
+
+def get_light_status(value):
+    if value < config.LIGHT_DARK:
+        return "DARK", "Green"
+    elif value < config.LIGHT_MODERATE:
+        return "NORMAL", "Yellow"
+    else:
+        return "BRIGHT", "Red"
+
+def get_crowd_status(count):
+    """[NUEVO] Evalúa el nivel de concurrencia de personas."""
+    if count < config.CROWD_LOW:
+        return "LOW", "Green"
+    elif count < config.CROWD_MODERATE:
+        return "MODERATE", "Yellow"
+    else:
+        return "HIGH", "Red"
 
 # ------------------------
 # TASKS
@@ -171,7 +235,72 @@ async def sound_monitor(char, connection):
         # Yield CPU control back to the async loop for BLE reliability
         await asyncio.sleep(config.SAMPLE_TIME)
 
+# -------- LIGHT ------------------ #
+async def light_monitor(char_light, connection):
+    print("Light monitor active")
+    last_notification_time = 0
+    last_status = ""
+    
+    while True:
+        light_val = light_adc.read_u16()
+        status, color = get_light_status(light_val)
+        current_time = utime.ticks_ms() / 1000
+        
+        if status != last_status or (current_time - last_notification_time >= config.LIGHT_COOLDOWN):
+            msg = f"LIGHT:{status}|{color}|RAW:{light_val}"
+            print(f"[{utime.ticks_ms()/1000:.1f}s] {msg}")
+            
+            last_status = status
+            
+            if connection is not None:
+                try:
+                    char_light.write(msg.encode("utf8"))
+                    char_light.notify(connection)
+                    last_notification_time = current_time
+                except Exception as e:
+                    print("Error BLE Light:", e)
+            else:
+                last_notification_time = current_time
+                
+        await asyncio.sleep(config.LIGHT_SAMPLE)
 
+# -------------- CROWDNESS  -------------- #
+async def crowd_monitor(char_crowd, connection):
+    print("Crowdness monitor active")
+    last_notification_time = 0
+    last_status = ""
+    
+    # Start listening on WIFI
+    esp32.raw_dot11_sniffer(wifi_sniffer_callback)
+
+    while True:
+        await asyncio.sleep(config.CROWD_WINDOW_SEC)
+        
+        # Count unique hash durnig a period of time
+        unique_count = len(seen_hashes)
+        status, color = get_crowd_status(unique_count)
+        current_time = utime.ticks_ms() / 1000
+        
+        if status != last_status or (current_time - last_notification_time >= config.CROWD_COOLDOWN):
+            msg = f"CROWD:{status}|{color}|COUNT:{unique_count}"
+            print(f"[{utime.ticks_ms()/1000:.1f}s] {msg}")
+            
+            last_status = status
+            
+            if connection is not None:
+                try:
+                    char_crowd.write(msg.encode("utf8"))
+                    char_crowd.notify(connection)
+                    last_notification_time = current_time
+                except Exception as e:
+                    print("Error BLE Crowd:", e)
+            else:
+                last_notification_time = current_time
+        
+        # clean accumulated hashes (saves RAM)
+        seen_hashes.clear()
+
+# -------- MAINTENANCE ------------ #
 # run every 10 sec to clean up the RAM
 async def system_maintenance():
     """Keeps RAM clean for continuous execution."""
@@ -188,20 +317,28 @@ async def main():
     
     while True: #to be able lto reconnect with the device
         print("Waiting for connection...")
-        
-        # 2. Manage connection
-        async with await aioble.advertise(
-            100000, name="MyESP32C3_Sound", services=[SERVICE_UUID] #mu = 100ms
-        ) as connection:
-            print("Connected to:", connection.device)
-            
-            # 3.Manage all tasks in paralel
-            await asyncio.gather(sound_monitor(char, connection),
-                                 battery_monitor(char_bat, connection),
-                                # light_monitor(char_light, connection),  <-- Add here in the future
-                                # crowdness_monitor(char_light, connection),  <-- Add here in the future
-                                 system_maintenance()
-                                 )
-        print("Disconnected!")
+
+        try:
+            # 2. Manage connection
+            async with await aioble.advertise(
+                100000, name="MyESP32C3_Sound", services=[SERVICE_UUID] #mu = 100ms
+            ) as connection:
+                print("Connected to:", connection.device)
+                
+                # 3.Manage all tasks in paralel
+                await asyncio.gather(sound_monitor(char, connection),
+                    battery_monitor(char_bat, connection),
+                    light_monitor(char_light, connection),
+                    crowd_monitor(char_light, connection),
+                    system_maintenance()
+                )
+            print("Disconnected!")
+
+            await connection.disconnected()
+
+        except Exception as e:
+            print("Resetting BLE radio due to:", e)
+            print("Disconnected! Re-opening advertisement...")
+            await asyncio.sleep_ms(500)
 
 asyncio.run(main())
