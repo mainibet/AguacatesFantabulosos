@@ -1,9 +1,9 @@
 # ═══════════════════════════════════════════
-# ADC PINS — ESP32-C5
+# ADC PINS — ESP32-C3
 # ═══════════════════════════════════════════
+MIC_GPIO       = 0       # ADC1_CH0 for analog mic
 LIGHT_GPIO     = 1       # ADC1_CH1 for LDR
 BAT_GPIO_PIN   = 3       # ADC1_CH3 to devide tension
-MIC_GPIO       = 0       # ADC1_CH0 for analog mic
 
 # ═══════════════════════════════════════════
 # SOUND — ADC Bit Range Limits

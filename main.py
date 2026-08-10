@@ -23,15 +23,12 @@ bat_adc.atten(ADC.ATTN_11DB)
 # ------------------------
 
 #11dB (decibels) enable the pin to read full 0-3.3V range, not only 1.0V. (KY-037 delivers 3.3V)
-#
-# mic = ADC(0)
 mic = ADC(Pin(config.MIC_GPIO))
 mic.atten(ADC.ATTN_11DB)
 
 # ------------------------
 # CONFIG LIGHT
 # ------------------------
-# light_adc = ADC(1)
 light_adc = ADC(Pin(config.LIGHT_GPIO))
 light_adc.atten(ADC.ATTN_11DB)
 
@@ -329,12 +326,11 @@ async def main():
                 await asyncio.gather(sound_monitor(char, connection),
                     battery_monitor(char_bat, connection),
                     light_monitor(char_light, connection),
-                    crowd_monitor(char_light, connection),
+                    crowd_monitor(char_crowd, connection),
                     system_maintenance()
                 )
+                await connection.disconnected()
             print("Disconnected!")
-
-            await connection.disconnected()
 
         except Exception as e:
             print("Resetting BLE radio due to:", e)
