@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Awareness Dashboard — variants prototype (PROTOTYPE, throwaway)</title>
+<!--
+  PROTOTYPE — throwaway. Three variants of the Awareness dashboard sensor
+  section, switchable via ?variant=A|B|C and the floating bar at the bottom.
+  Question: what should event-driven sensor feedback look like, with
+  thresholds hidden behind a flip / gear / inline drawer?
+  Double-click this file to run; no server needed.
+-->
+<style>
+  :root {
+    --bg: #1c1b40; --card: #272751; --surface: #2f2f5e; --text: #f0eefc;
+    --muted: #acaac9; --border: #3e3b6b; --secondary: #313162;
+    --primary: #5a42a3; --mint: #35dca2; --violet: #8f7fd6;
+    --sky: #7ab8f5; --amber: #ffd166;
+    --radius: 24px; --radius-tile: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { width: 400px; min-height: 700px; padding: 20px 16px 90px; position: relative; }
+
+  /* ── shared header ── */
+  .statusbar { display: flex; gap: 8px; margin-bottom: 14px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--secondary); color: var(--muted);
+    border-radius: 999px; padding: 5px 12px; font-size: 12px;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); }
+  .pill.alert .dot { background: var(--amber); }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.14em; color: var(--muted);
+    text-transform: uppercase; margin: 22px 0 10px;
+  }
+  h1 { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .quiet-toggle {
+    margin-left: auto; background: none; border: 1px solid var(--border);
+    color: var(--muted); border-radius: 999px; padding: 5px 10px;
+    font-size: 12px; cursor: pointer;
+  }
+  .quiet-toggle.on { color: var(--amber); border-color: var(--amber); }
+
+  body.quiet *, body.quiet *::before, body.quiet *::after {
+    animation: none !important; transition: none !important;
+  }
+
+  /* ═══════════ VARIANT A — ambient glow cards ═══════════ */
+  .glow-card {
+    position: relative; background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 14px;
+    perspective: 900px;
+  }
+  .glow-card::before {
+    content: ""; position: absolute; inset: 0; border-radius: var(--radius);
+    background: radial-gradient(120% 130% at 50% 20%,
+      color-mix(in srgb, var(--tone) calc(var(--glow, 0) * 55%), transparent), transparent 70%);
+    opacity: var(--glow, 0); transition: opacity 1.2s ease;
+    pointer-events: none;
+  }
+  .flip-inner { position: relative; transform-style: preserve-3d; transition: transform 0.5s cubic-bezier(.4,.1,.2,1); }
+  .glow-card.flipped .flip-inner { transform: rotateY(180deg); }
+  .face {
+    backface-visibility: hidden; display: flex; flex-direction: column;
+  }
+  .face.front { gap: 12px; }
+  .face.back {
+    position: absolute; inset: 0; transform: rotateY(180deg);
+    justify-content: center; gap: 14px; padding: 4px 2px;
+  }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .icon-tile {
+    width: 44px; height: 44px; border-radius: var(--radius-tile);
+    display: grid; place-items: center; flex: none;
+    background: color-mix(in srgb, var(--tone) 18%, transparent);
+    color: var(--tone);
+  }
+  .icon-tile svg { width: 22px; height: 22px; }
+  .name { font-size: 16px; font-weight: 600; }
+  .status-pill {
+    margin-left: auto; font-size: 11px; letter-spacing: 0.08em;
+    color: var(--muted); background: var(--secondary);
+    padding: 4px 10px; border-radius: 999px; text-transform: uppercase;
+  }
+  .status-pill.fired { color: var(--tone); background: color-mix(in srgb, var(--tone) 16%, transparent); }
+  .gear-btn {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    padding: 4px; border-radius: 8px; display: grid; place-items: center;
+  }
+  .gear-btn:hover { color: var(--text); background: var(--secondary); }
+  .gear-btn svg { width: 17px; height: 17px; }
+  .event-line { display: flex; align-items: baseline; gap: 8px; font-size: 14px; color: var(--muted); min-height: 20px; }
+  .event-line .val { color: var(--tone); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .dot-strip { display: flex; gap: 3px; align-items: flex-end; height: 14px; margin-top: 4px; }
+  .dot-strip .tick { width: 4px; border-radius: 2px; background: var(--secondary); opacity: .5; }
+  .dot-strip .tick.hit { background: var(--tone); opacity: 0; transition: opacity 1.5s linear; }
+  .dot-strip .tick.hit.lit { opacity: 1; }
+  .back-label { font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+  .hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .done-btn {
+    align-self: flex-start; background: var(--primary); color: var(--text);
+    border: none; border-radius: 10px; padding: 8px 18px; font-size: 13px; cursor: pointer;
+  }
+
+  /* ── shared range slider ── */
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 3px;
+    background: linear-gradient(to right, var(--tone) var(--fill, 50%), var(--border) var(--fill, 50%));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--text); border: 3px solid var(--tone); margin-top: -6px;
+  }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--border); }
+  input[type=range]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--tone); }
+  input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--text); border: 3px solid var(--tone); }
+  .slider-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .slider-row .v { color: var(--tone); font-weight: 600; }
+
+  /* ═══════════ VARIANT B — unified activity timeline ═══════════ */
+  .chips { display: flex; gap: 8px; margin-bottom: 16px; }
+  .chip {
+    flex: 1; display: flex; flex-direction: column; gap: 4px; align-items: center;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-tile);
+    padding: 10px 6px; font-size: 12px; color: var(--muted);
+  }
+  .chip .icon-tile { width: 34px; height: 34px; }
+  .chip .icon-tile svg { width: 18px; height: 18px; }
+  .chip .state-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--secondary); }
+  .chip.fired .state-dot { background: var(--tone); box-shadow: 0 0 8px var(--tone); }
+  .timeline { position: relative; padding-left: 6px; }
+  .now-mark { font-size: 11px; letter-spacing: .12em; color: var(--amber); text-transform: uppercase; margin: 2px 0 10px; }
+  .t-row {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px; margin-bottom: 10px;
+    animation: rise .45s ease both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+  .t-body { flex: 1; min-width: 0; }
+  .t-head { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
+  .t-head .val { color: var(--tone); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .t-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .t-meta .exceed { color: var(--amber); }
+  .t-row .gear-btn { margin-left: 4px; }
+  .t-settings {
+    display: grid; grid-template-rows: 0fr; transition: grid-template-rows .35s ease;
+  }
+  .t-settings > div { overflow: hidden; }
+  .t-settings.open { grid-template-rows: 1fr; }
+  .t-settings .panel { padding: 4px 0 6px; }
+  .empty-state { color: var(--muted); font-size: 13px; padding: 14px 4px; }
+
+  /* ═══════════ VARIANT C — radial gauges ═══════════ */
+  .gauges { display: flex; gap: 12px; margin-bottom: 18px; }
+  .gauge-wrap { position: relative; flex: 1; }
+  .gauge-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 8px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .gauge { width: 92px; height: 92px; display: block; }
+  .gauge .arc-bg { stroke: var(--secondary); }
+  .gauge .arc-fg { stroke: var(--tone); opacity: 0; transition: opacity .8s ease; }
+  .gauge .tick { stroke: var(--muted); }
+  .gauge-label { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.3; }
+  .gauge-label .gv { display: block; color: var(--tone); font-weight: 600; font-size: 15px; min-height: 18px; font-variant-numeric: tabular-nums; }
+  .gauge-center { fill: var(--text); font-size: 11px; font-weight: 600; text-anchor: middle; }
+  .popover {
+    position: absolute; left: 0; right: 0; top: calc(100% - 6px); z-index: 5;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-tile);
+    padding: 12px; display: none; box-shadow: 0 12px 30px rgba(0,0,0,.35);
+  }
+  .popover.open { display: block; }
+  .popover .hint { margin-top: 6px; }
+  .event-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .epill {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px;
+    color: var(--muted); animation: rise .4s ease both;
+  }
+  .epill .edot { width: 8px; height: 8px; border-radius: 50%; background: var(--tone); }
+  .epill b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ── floating variant switcher (prototype chrome, not part of the design) ── */
+  .switcher {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 14px;
+    background: #0e0d22; border: 1px solid var(--primary);
+    border-radius: 999px; padding: 8px 14px; z-index: 100;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
+  .switcher button {
+    background: none; border: none; color: var(--text); cursor: pointer;
+    font-size: 16px; width: 28px; height: 28px; border-radius: 50%;
+  }
+  .switcher button:hover { background: var(--primary); }
+  .switcher .label { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 128px; text-align: center; }
+  .switcher .label b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="statusbar">
+    <span class="pill"><span class="dot"></span>connected</span>
+    <span class="pill"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="16" height="10" rx="2.5"/><line x1="21" y1="10" x2="21" y2="14"/><line x1="5" y1="10.5" x2="5" y2="13.5" stroke="var(--mint)"/></svg> 82%</span>
+    <button class="quiet-toggle" id="quietToggle" title="Quiet mode: stop all motion">quiet</button>
+  </div>
+  <h1>Wearable</h1>
+  <div class="sub">awareness companion</div>
+  <div id="stage"></div>
+</div>
+
+<div class="switcher">
+  <button id="prev" title="previous variant">‹</button>
+  <span class="label" id="swLabel"></span>
+  <button id="next" title="next variant">›</button>
+</div>
+
+<script>
+/* ═══════════════════ shared state (prototype: in-memory only) ═══════════════════ */
+const SENSORS = {
+  light:     { label: "Light",     unit: "lux",    min: 0,   max: 1200, step: 20,  def: 800, tone: "var(--mint)",   icon: "light" },
+  crowdness: { label: "Crowdness", unit: "ppl/m²", min: 0,   max: 6,    step: 0.1, def: 3.5, tone: "var(--violet)", icon: "crowdness" },
+  noise:     { label: "Noise",     unit: "dB",     min: 30,  max: 120,  step: 1,   def: 75,  tone: "var(--sky)",    icon: "noise" },
+};
+const ORDER = ["light", "crowdness", "noise"];
+const store = { thresholds: { light: 800, crowdness: 3.5, noise: 75 }, events: [] };
+// seed a couple of events so first paint isn't empty
+seed({ noise: [88, 12], light: [940, 45], crowdness: [4.2, 130] });
+function seed(list) {
+  const now = Date.now();
+  for (const id of Object.keys(list)) {
+    const [value, secsAgo] = list[id];
+    store.events.push({ sensor: id, value, threshold: store.thresholds[id], at: now - secsAgo * 1000 });
+  }
+  sortEvents();
+}
+function sortEvents() { store.events.sort((a, b) => b.at - a.at); }
+function pushEvent(id, value) {
+  store.events.push({ sensor: id, value, threshold: store.thresholds[id], at: Date.now() });
+  sortEvents();
+  if (store.events.length > 40) store.events.length = 40;
+}
+function ago(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + "s ago";
+  const m = Math.round(s / 60);
+  if (m < 60) return m + "m ago";
+  return Math.round(m / 60) + "h ago";
+}
+/* event simulator — device only pushes when a threshold is crossed */
+function nextEvent() {
+  const now = Date.now();
+  for (const id of ORDER) {
+    const s = SENSORS[id], t = store.thresholds[id];
+    if (Math.random() < 0.33) {
+      const span = (s.max - t) * 0.55;
+      const value = Math.min(s.max, t + span * (0.15 + Math.random() * 0.85));
+      pushEvent(id, Math.round(value * 10) / 10);
+    }
+  }
+  setTimeout(nextEvent, 2500 + Math.random() * 5000);
+}
+setTimeout(nextEvent, 3500);
+
+/* ═══════════════════ icons ═══════════════════ */
+const ICONS = {
+  light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19"/></svg>',
+  crowdness: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="7.5" cy="9" r="2.6"/><circle cx="16.5" cy="9" r="2.6"/><path d="M3.6 19.5a4 4 0 0 1 7.8 0M12.6 19.5a4 4 0 0 1 7.8 0"/><circle cx="12" cy="6.2" r="1.7"/></svg>',
+  noise: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 9.5a3 3 0 0 1 0 5M8.5 7a6.5 6.5 0 0 1 0 10M12 4.5a10 10 0 0 1 0 15"/></svg>',
+};
+function gearSVG() {
+  let teeth = "";
+  for (let i = 0; i < 8; i++) {
+    const a = (i * 45 - 22.5) * Math.PI / 180;
+    teeth += `<line x1="${12 + 5.6 * Math.cos(a)}" y1="${12 + 5.6 * Math.sin(a)}" x2="${12 + 7.4 * Math.cos(a)}" y2="${12 + 7.4 * Math.sin(a)}"/>`;
+  }
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3.1"/>${teeth}</svg>`;
+}
+function iconSVG(name) { return ICONS[name]; }
+
+/* ═══════════════════ shared slider builder ═══════════════════ */
+function sliderHTML(id) {
+  const s = SENSORS[id];
+  const fill = ((store.thresholds[id] - s.min) / (s.max - s.min)) * 100;
+  return `
+    <div class="slider-row"><span>${s.label} threshold</span><span class="v">${fmt(store.thresholds[id])} ${s.unit}</span></div>
+    <input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${store.thresholds[id]}"
+           style="--tone:${s.tone};--fill:${fill}%" data-id="${id}">
+    <div class="hint">${s.hint}</div>`;
+}
+const HINTS = {
+  light: "Alerts on bright or flickering environments",
+  crowdness: "Alerts when the space around you gets dense",
+  noise: "Alerts on sustained loud sound",
+};
+function fmt(v) { return +v.toFixed(1); }
+
+/* ═══════════════════ VARIANT A — ambient glow cards ═══════════════════ */
+const VariantA = {
+  name: "Ambient glow cards",
+  root: null,
+  lastEventAt: {},
+  mount() {
+    this.lastEventAt = {};
+    this.root = document.getElementById("stage");
+    this.root.innerHTML = `
+      <div class="eyebrow">Sensors</div>
+      ${ORDER.map(id => {
+        const s = SENSORS[id];
+        return `<div class="glow-card" id="card-${id}" style="--tone:${s.tone}">
+          <div class="flip-inner">
+            <div class="face front">
+              <div class="row">
+                <div class="icon-tile">${iconSVG(s.icon)}</div>
+                <div class="name">${s.label}</div>
+                <span class="status-pill" id="pill-${id}">monitoring</span>
+                <button class="gear-btn" data-id="${id}" title="threshold settings">${gearSVG()}</button>
+              </div>
+              <div class="event-line" id="ev-${id}"></div>
+              <div class="dot-strip" id="strip-${id}"></div>
+            </div>
+            <div class="face back">
+              <div class="back-label">${s.label}</div>
+              ${sliderHTML(id)}
+              <button class="done-btn" data-id="${id}">Done</button>
+            </div>
+          </div>
+        </div>`;
+      }).join("")}`;
+    this.root.querySelectorAll(".gear-btn").forEach(b => b.onclick = () => this.flip(b.dataset.id, true));
+    this.root.querySelectorAll(".done-btn").forEach(b => b.onclick = () => this.flip(b.dataset.id, false));
+    this.root.querySelectorAll("input[type=range]").forEach(r => r.oninput = e => {
+      store.thresholds[r.dataset.id] = +e.target.value;
+      const fill = ((+e.target.value - SENSORS[r.dataset.id].min) / (SENSORS[r.dataset.id].max - SENSORS[r.dataset.id].min)) * 100;
+      e.target.style.setProperty("--fill", fill + "%");
+      e.target.parentElement.querySelector(".v").textContent = `${fmt(+e.target.value)} ${SENSORS[r.dataset.id].unit}`;
+    });
+  },
+  flip(id, open) {
+    const card = document.getElementById("card-" + id);
+    card.classList.toggle("flipped", open);
+    if (open) card.querySelector("input").focus();
+  },
+  update() {
+    const now = Date.now();
+    for (const id of ORDER) {
+      const ev = store.events.find(e => e.sensor === id);
+      const card = document.getElementById("card-" + id);
+      if (!card) continue;
+      const s = SENSORS[id];
+      const el = document.getElementById("ev-" + id);
+      if (ev && now - ev.at < 60000) {
+        el.innerHTML = `peak <span class="val">${fmt(ev.value)} ${s.unit}</span> · exceeded ${fmt(ev.threshold)} · ${ago(now - ev.at)}`;
+      } else {
+        el.textContent = "no alerts";
+      }
+      // glow decays over 15s after the most recent event
+      const age = ev ? (now - ev.at) / 1000 : 999;
+      const glow = ev && age < 15 ? Math.max(0, 1 - age / 15) : 0;
+      card.style.setProperty("--glow", glow);
+      const pill = document.getElementById("pill-" + id);
+      pill.textContent = ev && age < 15 ? "alert" : "monitoring";
+      pill.classList.toggle("fired", ev && age < 15);
+      // pulse on fresh event
+      if (ev && this.lastEventAt[id] !== ev.at && age < 2) {
+        this.lastEventAt[id] = ev.at;
+        card.animate(
+          [{ transform: "scale(1)" }, { transform: "scale(1.02)" }, { transform: "scale(1)" }],
+          { duration: 1200, easing: "ease-in-out" }
+        );
+      }
+      // 60s dot strip
+      const strip = document.getElementById("strip-" + id);
+      let html = "";
+      for (let i = 59; i >= 0; i--) {
+        const bucketStart = now - i * 1000, bucketEnd = bucketStart + 1000;
+        const hit = store.events.some(e => e.sensor === id && e.at >= bucketStart && e.at < bucketEnd);
+        html += `<div class="tick${hit ? " hit lit" : ""}" style="height:${6 + (59 - i) * 0.13}px"></div>`;
+      }
+      strip.innerHTML = html;
+    }
+  },
+};
+
+/* ═══════════════════ VARIANT B — unified activity timeline ═══════════════════ */
+const VariantB = {
+  name: "Activity timeline",
+  mount() {
+    this.root = document.getElementById("stage");
+    this.root.innerHTML = `
+      <div class="eyebrow">Sensors</div>
+      <div class="chips">
+        ${ORDER.map(id => { const s = SENSORS[id];
+          return `<div class="chip" id="chip-${id}" style="--tone:${s.tone}">
+            <div class="icon-tile">${iconSVG(s.icon)}</div>${s.label}
+            <div class="state-dot"></div></div>`; }).join("")}
+      </div>
+      <div class="eyebrow">Activity</div>
+      <div class="timeline" id="timeline"><div class="now-mark">now</div></div>`;
+  },
+  renderTimeline() {
+    const tl = document.getElementById("timeline");
+    const items = store.events.slice(0, 8);
+    tl.innerHTML = `<div class="now-mark">now</div>` + items.map(ev => {
+      const s = SENSORS[ev.sensor];
+      return `<div class="t-row" style="--tone:${s.tone}">
+        <div class="icon-tile">${iconSVG(s.icon)}</div>
+        <div class="t-body">
+          <div class="t-head"><span>${s.label}</span><span class="val">${fmt(ev.value)} ${s.unit}</span></div>
+          <div class="t-meta"><span class="exceed">exceeded ${fmt(ev.threshold)} ${s.unit}</span> · ${ago(Date.now() - ev.at)}</div>
+          <div class="t-settings" id="set-${ev.at}"><div><div class="panel">
+            ${sliderHTML(ev.sensor)}
+          </div></div></div>
+        </div>
+        <button class="gear-btn" data-key="${ev.at}" title="threshold settings">${gearSVG()}</button>
+      </div>`;
+    }).join("") || `<div class="empty-state">no alerts yet — the sensors stay quiet until a threshold is crossed</div>`;
+    tl.querySelectorAll(".gear-btn").forEach(b => b.onclick = () => {
+      const panel = document.getElementById("set-" + b.dataset.key);
+      panel.classList.toggle("open");
+    });
+    tl.querySelectorAll("input[type=range]").forEach(r => r.oninput = e => {
+      store.thresholds[r.dataset.id] = +e.target.value;
+      const fill = ((+e.target.value - SENSORS[r.dataset.id].min) / (SENSORS[r.dataset.id].max - SENSORS[r.dataset.id].min)) * 100;
+      e.target.style.setProperty("--fill", fill + "%");
+      e.target.parentElement.querySelector(".v").textContent = `${fmt(+e.target.value)} ${SENSORS[r.dataset.id].unit}`;
+    });
+  },
+  update() {
+    const now = Date.now();
+    if (!this._lastRender || now - this._lastRender > 800) {
+      this._lastRender = now;
+      this.renderTimeline();
+    }
+    for (const id of ORDER) {
+      const ev = store.events.find(e => e.sensor === id);
+      const chip = document.getElementById("chip-" + id);
+      chip.classList.toggle("fired", !!ev && now - ev.at < 20000);
+    }
+  },
+};
+
+/* ═══════════════════ VARIANT C — radial gauges ═══════════════════ */
+const VariantC = {
+  name: "Radial gauges",
+  gaugeAngle(id) {
+    const s = SENSORS[id];
+    const v = Math.max(s.min, Math.min(s.max, store.thresholds[id]));
+    return -210 + ((v - s.min) / (s.max - s.min)) * 240;
+  },
+  mount() {
+    this.root = document.getElementById("stage");
+    this.root.innerHTML = `
+      <div class="eyebrow">Sensors</div>
+      <div class="gauges">
+        ${ORDER.map(id => { const s = SENSORS[id];
+          const R = 40, CX = 60, CY = 60;
+          const pol = (deg, rad) => [CX + rad * Math.cos(deg * Math.PI / 180), CY + rad * Math.sin(deg * Math.PI / 180)];
+          const a0 = -210, a1 = 30;
+          const arc = (from, to) => {
+            const [x1, y1] = pol(from, R), [x2, y2] = pol(to, R);
+            const large = (to - from) % 360 > 180 ? 1 : 0;
+            return `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}`;
+          };
+          const ta = this.gaugeAngle(id);
+          const [tx1, ty1] = pol(ta - 4, R - 9), [tx2, ty2] = pol(ta + 4, R - 9), [tx3, ty3] = pol(ta, R + 3);
+          return `<div class="gauge-wrap" id="gw-${id}">
+            <div class="gauge-card" style="--tone:${s.tone}">
+              <svg class="gauge" viewBox="0 0 120 120">
+                <path class="arc-bg" d="${arc(a0, a1)}" fill="none" stroke-width="7" stroke-linecap="round"/>
+                <path class="arc-fg" id="fg-${id}" d="${arc(a0, a1)}" fill="none" stroke-width="7" stroke-linecap="round" stroke-dasharray="500"/>
+                <line class="tick" x1="${tx1}" y1="${ty1}" x2="${tx2}" y2="${ty2}" stroke-width="2.5" stroke-linecap="round"/>
+                <line class="tick" x1="${tx3}" y1="${ty3}" x2="${tx3}" y2="${ty3}" stroke-width="0"/>
+                <g id="ctr-${id}">
+                  <foreignObject x="30" y="34" width="60" height="26">${iconSVG(s.icon)}</foreignObject>
+                </g>
+              </svg>
+              <div class="gauge-label"><span class="gv" id="gv-${id}">—</span>${s.label}</div>
+              <button class="gear-btn" data-id="${id}" title="threshold settings">${gearSVG()}</button>
+            </div>
+            <div class="popover" id="pop-${id}">${sliderHTML(id)}</div>
+          </div>`; }).join("")}
+      </div>
+      <div class="eyebrow">Recent alerts</div>
+      <div class="event-pills" id="pills"></div>`;
+    this.root.querySelectorAll(".gear-btn").forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      const pop = document.getElementById("pop-" + b.dataset.id);
+      const wasOpen = pop.classList.contains("open");
+      document.querySelectorAll(".popover").forEach(p => p.classList.remove("open"));
+      if (!wasOpen) pop.classList.add("open");
+    });
+    document.addEventListener("click", this._closePops = () =>
+      document.querySelectorAll(".popover").forEach(p => p.classList.remove("open")));
+    this.root.querySelectorAll("input[type=range]").forEach(r => r.oninput = e => {
+      store.thresholds[r.dataset.id] = +e.target.value;
+      const fill = ((+e.target.value - SENSORS[r.dataset.id].min) / (SENSORS[r.dataset.id].max - SENSORS[r.dataset.id].min)) * 100;
+      e.target.style.setProperty("--fill", fill + "%");
+      e.target.parentElement.querySelector(".v").textContent = `${fmt(+e.target.value)} ${SENSORS[r.dataset.id].unit}`;
+    });
+    this.root.querySelectorAll(".popover input").forEach(r => r.onclick = e => e.stopPropagation());
+  },
+  update() {
+    const now = Date.now();
+    for (const id of ORDER) {
+      const s = SENSORS[id];
+      const ev = store.events.find(e => e.sensor === id);
+      const fg = document.getElementById("fg-" + id);
+      const gv = document.getElementById("gv-" + id);
+      const age = ev ? (now - ev.at) / 1000 : 999;
+      const active = ev && age < 15;
+      // arc sweeps to the peak value, then fades over 15s
+      const peak = ev ? Math.max(s.min, Math.min(s.max, ev.value)) : s.min;
+      const endAngle = -210 + ((peak - s.min) / (s.max - s.min)) * 240;
+      const R = 40, CX = 60, CY = 60;
+      const pol = (deg, rad) => [CX + rad * Math.cos(deg * Math.PI / 180), CY + rad * Math.sin(deg * Math.PI / 180)];
+      const [x2, y2] = pol(endAngle, R);
+      const large = ((endAngle + 210) % 360) > 180 ? 1 : 0;
+      fg.setAttribute("d", `M ${pol(-210, R)[0]} ${pol(-210, R)[1]} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}`);
+      fg.style.opacity = active ? 0.9 : 0;
+      gv.textContent = active ? `${fmt(ev.value)}` : "—";
+      gv.style.minHeight = "18px";
+      document.getElementById("ctr-" + id).innerHTML = active
+        ? `<text class="gauge-center" x="60" y="56">${fmt(ev.value)}</text><text class="gauge-center" x="60" y="72" style="font-size:8px;fill:var(--muted)">${s.unit}</text>`
+        : `<text class="gauge-center" x="60" y="64" style="font-size:9px;fill:var(--muted)">quiet</text>`;
+    }
+    const pills = document.getElementById("pills");
+    pills.innerHTML = store.events.slice(0, 4).map(ev => {
+      const s = SENSORS[ev.sensor];
+      return `<span class="epill" style="--tone:${s.tone}"><span class="edot"></span>${s.label} <b>${fmt(ev.value)}</b> ${s.unit} · ${ago(now - ev.at)}</span>`;
+    }).join("") || `<span class="empty-state">no alerts yet</span>`;
+  },
+};
+
+/* ═══════════════════ switcher ═══════════════════ */
+const VARIANTS = { A: VariantA, B: VariantB, C: VariantC };
+const KEYS = Object.keys(VARIANTS);
+let current = null;
+
+function applyVariant(key) {
+  if (current && current.destroy) current.destroy();
+  if (current && current.root) current.root.innerHTML = "";
+  document.removeEventListener("click", current && current._closePops);
+  current = VARIANTS[key];
+  current.mount();
+  current.update();
+  document.getElementById("swLabel").innerHTML = `<b>${key}</b> — ${current.name}`;
+}
+function setVariant(key, push) {
+  key = KEYS.includes(key) ? key : "A";
+  if (push) history.replaceState(null, "", "?variant=" + key);
+  applyVariant(key);
+}
+document.getElementById("prev").onclick = () => setVariant(KEYS[(KEYS.indexOf(currentKey()) + KEYS.length - 1) % KEYS.length], true);
+document.getElementById("next").onclick = () => setVariant(KEYS[(KEYS.indexOf(currentKey()) + 1) % KEYS.length], true);
+function currentKey() { return Object.keys(VARIANTS).find(k => VARIANTS[k] === current); }
+document.addEventListener("keydown", e => {
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if (e.key === "ArrowLeft") setVariant(KEYS[(KEYS.indexOf(currentKey()) + KEYS.length - 1) % KEYS.length], true);
+  if (e.key === "ArrowRight") setVariant(KEYS[(KEYS.indexOf(currentKey()) + 1) % KEYS.length], true);
+});
+
+/* quiet mode — stops all motion (hypersensitive-friendly) */
+const q = document.getElementById("quietToggle");
+q.onclick = () => {
+  document.body.classList.toggle("quiet");
+  q.classList.toggle("on");
+  q.textContent = document.body.classList.contains("quiet") ? "quiet on" : "quiet";
+};
+
+/* main loop */
+setInterval(() => { if (current) current.update(); }, 250);
+setVariant(new URLSearchParams(location.search).get("variant") || "A");
+</script>
+</body>
+</html>
