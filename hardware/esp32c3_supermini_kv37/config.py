@@ -51,6 +51,19 @@ BAT_REF        = 3.3     # reference tensionfrom ADC in ESP32-C5
 BAT_WARN_PCT   = 20      # % under which it is marked as "needs charging"
 
 # ═══════════════════════════════════════════
+# APP THRESHOLDS — event-driven alerts (set from the app)
+# The device only notifies over BLE when the app-set threshold is
+# exceeded; the app pushes updates via the config characteristic.
+# ═══════════════════════════════════════════
+NOISE_THRESHOLD = 75.0    # dB (representative scale; default matches the app)
+LIGHT_THRESHOLD = 800.0   # lux (representative scale; default matches the app)
+
+# Traffic-light level → representative scale value (same mapping as the app,
+# so device-side gating agrees with the app's threshold slider)
+NOISE_LEVEL_DB  = {"QUIET": 45.0, "NORMAL": 70.0, "LOUD": 95.0}
+LIGHT_LEVEL_LUX = {"DARK": 80.0, "NORMAL": 400.0, "BRIGHT": 1000.0}
+
+# ═══════════════════════════════════════════
 # BLE
 # ═══════════════════════════════════════════
 ADV_INTERVAL_US = 500_000   # 500ms advertising (vs 100ms original → ~5× menos radio)

@@ -8,7 +8,7 @@ A modular wearable that monitors noise, light, and crowd levels to help you stay
 This project reads analog sound signals using an ESP32-C3 Super Mini, broadcasts alerts via **Bluetooth Low Energy (BLE)** when the noise exceeds a configured threshold, and displays real-time data for noise, light, and crowd levels, along with battery status and configurable alert thresholds.
 
 ## Features
-- Noise detection (BLE, dB)
+- Noise detection (BLE, traffic-light levels → dB)
 - Light sensitivity (BLE, 3 levels mapped to lux)
 - Crowd density estimated from nearby BLE devices (ppl/m²)
 - Threshold slider per sensor, set directly on the sensor scale
@@ -58,14 +58,26 @@ To make the program run automatically on boot:
 
 ## 📡 BLE Message Format
 
-The ESP32-C3 sends semicolon-separated key=value pairs:
+The ESP32-C3 notifies per sensor characteristic with `SENSOR:STATUS|COLOR|key=value`
+payloads. The status is a **traffic-light level** (the design deliberately avoids
+raw decibels — see `docs/decisions.md`).
 
-noise=72;light=1
-
-| Key | Type | Values |
+| Characteristic | Message | Status (traffic light) |
 |---|---|---|
-| `noise` | int | dB value (40–100) |
-| `light` | int | 0=dark, 1=medium, 2=bright |
+| sound | `SOUND:LOUD\|Red\|noise=38345` | `QUIET` / `NORMAL` / `LOUD` |
+| light | `LIGHT:DARK\|Green\|RAW:8000` | `DARK` / `NORMAL` / `BRIGHT` |
+| crowd | `CROWD:LOW\|Green\|COUNT:0` | `LOW` / `MODERATE` / `HIGH` |
+| battery | `BAT:85%\|V:3.9` | — |
+| config (app → device) | `noise=60;light=800` | writable thresholds |
+
+The value after `noise=`/`RAW=`/`COUNT=` is the raw sensor reading (display-only);
+the app maps the status word onto the sensor scale (e.g. `LOUD` ≈ 95 dB) so the
+threshold slider stays meaningful.
+
+**Event-driven alerts:** the device does not stream continuously — it notifies
+over BLE only when the reading exceeds the threshold configured in the app. The
+app pushes its thresholds to the device through the config characteristic on
+connect and whenever a slider changes.
 
 
 ## 🧪 Calibration Guide
@@ -112,6 +124,7 @@ project/
 ```
 
 ## Progress Documentation
+- 📖 [User Guide](docs/user-guide.md)
 - 📍 [Roadmap](docs/roadmap.md)
 - 📈 [Progress](docs/progress.md)
 

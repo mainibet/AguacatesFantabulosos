@@ -86,6 +86,8 @@ CHAR_LIGHT_UUID = bluetooth.UUID("87654321-4321-8765-4321-876543214323")
 CHAR_CROWD_UUID = bluetooth.UUID("87654321-4321-8765-4321-876543214324")
 # Battery mail
 CHAR_BAT_UUID = bluetooth.UUID("87654321-4321-8765-4321-876543214322")
+# Config mail (app → device): threshold settings
+CHAR_CONFIG_UUID = bluetooth.UUID("87654321-4321-8765-4321-876543214325")
 
 # Create BLE service
 ble = bluetooth.BLE()
@@ -105,6 +107,8 @@ char_light = aioble.Characteristic(service, CHAR_LIGHT_UUID, read=True, notify=T
 char_crowd = aioble.Characteristic(service, CHAR_CROWD_UUID, read=True, notify=True)
 # battery service
 char_bat = aioble.Characteristic(service, CHAR_BAT_UUID, read=True, notify=True)
+# config service (app → device): writable thresholds
+char_config = aioble.Characteristic(service, CHAR_CONFIG_UUID, read=True, write=True, notify=False, capture=True)
 
 aioble.register_services(service)
 
@@ -150,7 +154,7 @@ def get_light_status(value):
         return "BRIGHT", "Red"
 
 def get_crowd_status(count):
-    """Evalúa el nivel de concurrencia de personas."""
+    """Check people concurrency."""
     if count < config.CROWD_LOW:
         return "LOW", "Green"
     elif count < config.CROWD_MODERATE:
@@ -209,7 +213,8 @@ async def sound_monitor(char, connection):
 
     # Avoids overloading the BLE
     last_notification_time = 0
-    last_category = ""
+    was_above = False
+    last_threshold = None
 
     buf = bytearray(config.MIC_BUF_BYTES)
 
@@ -227,26 +232,32 @@ async def sound_monitor(char, connection):
             if v < min_v: min_v = v
         amplitude = max_v - min_v
 
-        category, color = get_noise_status(amplitude)
+        status, color = get_noise_status(amplitude)
 
         current_time = utime.ticks_ms() / 1000 #1000 to convert it into sec
 
-        if category != last_category or (current_time - last_notification_time >= config.SOUND_COOLDOWN):
-            if category == "LOUD": # Triggers alert based on your requirements
-                msg = f"ALERT:{category}|{color}|noise={int(amplitude)}"
-                print(msg)
+        # Event-driven: notify only when the app-set threshold is exceeded
+        # (edge-triggered, so a sustained over-threshold sound sends once)
+        above = config.NOISE_LEVEL_DB[status] >= noise_threshold
+        # A threshold change re-arms the edge detector, so lowering the
+        # threshold while the level is already above it still alerts.
+        if noise_threshold != last_threshold:
+            last_threshold = noise_threshold
+            was_above = False
+        if above and not was_above and (current_time - last_notification_time >= config.SOUND_COOLDOWN):
+            msg = f"SOUND:{status}|{color}|noise={int(amplitude)}"
+            print(f"[{utime.ticks_ms()/1000:.1f}s] {msg}")
 
-                if connection is not None:
-                    try:
-                        char.write(msg.encode("utf8"))
-                        char.notify(connection)
-                        last_notification_time = current_time
-                        last_category = category
-                    except Exception as e:
-                        print("Error BLE:", e)
-                        connection = None
-                else:
-                    print("No device connected, alert skipped.")
+            if connection is not None:
+                try:
+                    char.write(msg.encode("utf8"))
+                    char.notify(connection)
+                    last_notification_time = current_time
+                except Exception as e:
+                    print("Error BLE Sound:", e)
+            else:
+                last_notification_time = current_time
+        was_above = above
 
         # Yield CPU control back to the async loop for BLE reliability
         await asyncio.sleep(0.01)
@@ -255,18 +266,24 @@ async def sound_monitor(char, connection):
 async def light_monitor(char_light, connection):
     print("Light monitor active")
     last_notification_time = 0
-    last_status = ""
+    was_above = False
+    last_threshold = None
 
     while True:
         light_val = light_adc.read_u16()
         status, color = get_light_status(light_val)
         current_time = utime.ticks_ms() / 1000
 
-        if status != last_status or (current_time - last_notification_time >= config.LIGHT_COOLDOWN):
+        # Event-driven: notify only when the app-set threshold is exceeded
+        above = config.LIGHT_LEVEL_LUX[status] >= light_threshold
+        # A threshold change re-arms the edge detector, so lowering the
+        # threshold while the level is already above it still alerts.
+        if light_threshold != last_threshold:
+            last_threshold = light_threshold
+            was_above = False
+        if above and not was_above and (current_time - last_notification_time >= config.LIGHT_COOLDOWN):
             msg = f"LIGHT:{status}|{color}|RAW:{light_val}"
             print(f"[{utime.ticks_ms()/1000:.1f}s] {msg}")
-
-            last_status = status
 
             if connection is not None:
                 try:
@@ -277,6 +294,7 @@ async def light_monitor(char_light, connection):
                     print("Error BLE Light:", e)
             else:
                 last_notification_time = current_time
+        was_above = above
 
         await asyncio.sleep(config.LIGHT_SAMPLE)
 
@@ -290,12 +308,11 @@ async def crowd_monitor(char_crowd, connection):
     if hasattr(esp32, "raw_dot11_sniffer"):
         esp32.raw_dot11_sniffer(wifi_sniffer_callback)
     else:
-        print("Crowdness sniffer unavailable on this build — reporting 0")
+        print("Crowdness sniffer unavailable — reporting 0")
 
     while True:
-        await asyncio.sleep(config.CROWD_WINDOW_SEC)
-
-        # Count unique hash during a period of time
+        # Initial reading goes out right away (the app reads the char on
+        # connect); afterwards each 30s window produces one reading.
         unique_count = len(seen_hashes)
         status, color = get_crowd_status(unique_count)
         current_time = utime.ticks_ms() / 1000
@@ -318,6 +335,34 @@ async def crowd_monitor(char_crowd, connection):
 
         # clean accumulated hashes (saves RAM)
         seen_hashes.clear()
+
+        # Accumulation window for the next reading
+        await asyncio.sleep(config.CROWD_WINDOW_SEC)
+
+# -------- CONFIG (app → device) -------- #
+# Thresholds set from the app via the config characteristic; defaults
+# mirror the app so the device gates alerts correctly out of the box.
+noise_threshold = config.NOISE_THRESHOLD
+light_threshold = config.LIGHT_THRESHOLD
+
+async def config_monitor(char_config, connection):
+    """Receive the app's threshold settings, e.g. 'noise=60;light=800'."""
+    global noise_threshold, light_threshold
+    while True:
+        try:
+            _, data = await char_config.written()
+            print("Config received:", repr(data))
+            for kv in data.decode().split(";"):
+                key, _, val = kv.partition("=")
+                if key == "noise":
+                    noise_threshold = float(val)
+                    print("noise threshold ->", noise_threshold)
+                elif key == "light":
+                    light_threshold = float(val)
+                    print("light threshold ->", light_threshold)
+        except Exception as e:
+            print("Config error:", repr(e))
+            await asyncio.sleep(1)
 
 # -------- MAINTENANCE ------------ #
 # run every 10 sec to clean up the RAM
@@ -360,6 +405,7 @@ async def main():
                     asyncio.create_task(_guarded(battery_monitor(char_bat, connection), "battery")),
                     asyncio.create_task(_guarded(light_monitor(char_light, connection), "light")),
                     asyncio.create_task(_guarded(crowd_monitor(char_crowd, connection), "crowd")),
+                    asyncio.create_task(_guarded(config_monitor(char_config, connection), "config")),
                     asyncio.create_task(system_maintenance()),
                 ]
                 await connection.disconnected()
