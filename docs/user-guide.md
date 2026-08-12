@@ -80,6 +80,9 @@ real device connection is available.
 - **Crowdness sniffer**: this MicroPython build of the board has no Wi-Fi
   sniffer API, so the device always counts 0 devices → `LOW`. Real crowd
   numbers need a sniffer-capable firmware build or a dedicated sensor.
+- **ICS-43434 (digital mic)**: I2S firmware is ready but the microphone
+  produces no data (SD line floating) — full diagnosis and test guide in
+  [`docs/device/ics43434-issue.md`](device/ics43434-issue.md).
 - **Battery reading**: the device reads the LiPo through a voltage divider.
   A deeply discharged battery reports `0%` even while charging — the battery
   math/wiring is a calibration item, not a BLE issue.

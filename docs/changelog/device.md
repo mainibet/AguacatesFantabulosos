@@ -5,6 +5,8 @@
 - **Edge re-arm on threshold change**: lowering the threshold while a level is already above re-notifies (previously the detector stayed latched).
 - **Crowd initial reading**: the crowd monitor sends its first reading immediately on connect instead of after the 30 s accumulation window.
 - **aioble `capture=True`** on the config characteristic: `written()` otherwise returns the connection object instead of the payload, breaking the threshold parse.
+- **MicroPython v1.28.0 I2S defect**: on the ESP32-C3, `machine.I2S` on v1.28.0 never outputs BCLK (WS only), so digital MEMS mics (ICS-43434) receive no bit clock and produce no data. Reflashed the board to **v1.26.1**, where BCLK/WS both toggle (verified by GPIO sampling).
+- **ICS-43434 status**: I2S path adapted (SCK→5, WS→4, SD→6, L/R→GND) and config corrected to match; SD line reads floating even with VDD and clocks present — the mic part itself is suspect (defective or non-genuine), confirmed silent across two other boards.
 - **Hardware notes**: battery divider reads `BAT:0%|V:1.75` while charging (calibration pending — below the 3.0 V floor); this MicroPython build lacks `esp32.raw_dot11_sniffer`, so crowd always reports 0 devices; the board can hang after a deep power loss until replug/reset.
 
 ### v0.3.0 - Connection hardening
