@@ -55,6 +55,42 @@ DEFAULT_THRESHOLDS = {s.id: s.default_threshold for s in SENSORS}
 # lux values so the design's lux scale stays meaningful with BLE data.
 LIGHT_LEVEL_LUX = {0: 80, 1: 400, 2: 1000}
 
+# Device sound levels (0=quiet, 1=normal, 2=loud) mapped to representative
+# dB values on the noise scale; the default threshold (75 dB) then alerts
+# on LOUD only, and sliding it lower adds NORMAL-level alerts.
+NOISE_LEVEL_DB = {0: 45.0, 1: 70.0, 2: 95.0}
+
+# Device crowd levels (0=low, 1=moderate, 2=high) mapped to representative
+# ppl/m² values; the default threshold (3.5) then alerts on HIGH only.
+CROWD_LEVEL_PPM = {0: 1.0, 1: 3.0, 2: 5.0}
+
+# Traffic-light labels per level — what the device actually sends. Event
+# rows show these words (not the representative units, which are a
+# display scale, not a measurement).
+LEVEL_LABELS = {
+    "noise": {0: "QUIET", 1: "NORMAL", 2: "LOUD"},
+    "light": {0: "DARK", 1: "NORMAL", 2: "BRIGHT"},
+    "crowdness": {0: "LOW", 1: "MODERATE", 2: "HIGH"},
+}
+# Reverse map: representative scale value -> traffic-light label
+VALUE_TO_LABEL = {
+    "noise": {NOISE_LEVEL_DB[level]: LEVEL_LABELS["noise"][level]
+              for level in LEVEL_LABELS["noise"]},
+    "light": {LIGHT_LEVEL_LUX[level]: LEVEL_LABELS["light"][level]
+              for level in LEVEL_LABELS["light"]},
+    "crowdness": {CROWD_LEVEL_PPM[level]: LEVEL_LABELS["crowdness"][level]
+                  for level in LEVEL_LABELS["crowdness"]},
+}
+
+
+def format_event_value(sensor_id, value):
+    """Label for a logged event value: traffic-light word for noise/light
+    (the device sends the label, not a measured unit), units otherwise."""
+    label = VALUE_TO_LABEL.get(sensor_id, {}).get(value)
+    if label is not None:
+        return label
+    return format_value(sensor_id, value)
+
 
 # ─────────────────────────────────────────────
 # FORMATTING HELPERS
@@ -110,6 +146,11 @@ class EventsStore:
         """All events, newest first."""
         return list(reversed(self._entries))
 
+    def clear(self):
+        """Drop every logged event — used when the first real device
+        connection replaces the seeded demo alerts."""
+        self._entries = []
+
     def recent(self, limit):
         """The `limit` newest events, newest first."""
         return self.all()[:limit]
@@ -121,13 +162,23 @@ class EventsStore:
                 return e
         return None
 
-    def is_recent_alert(self, sensor_id, threshold):
-        """True when the sensor crossed its threshold within the last hour."""
+    def last_event_seconds_ago(self, sensor_id):
+        """Seconds since the newest event for one sensor (None if none)."""
+        e = self.last_for(sensor_id)
+        if e is None:
+            return None
+        return (datetime.now() - e.at).total_seconds()
+
+    def is_recent_alert(self, sensor_id):
+        """True when the sensor reported an alert within the last
+        RECENT_WINDOW_MIN minutes. Deliberately independent of the current
+        threshold: an alert that happened stays "recent" for the window
+        even if the user later raises the threshold."""
         e = self.last_for(sensor_id)
         if e is None:
             return False
         age = datetime.now() - e.at
-        return age.total_seconds() < RECENT_WINDOW_MIN * 60 and e.value >= threshold
+        return age.total_seconds() < RECENT_WINDOW_MIN * 60
 
     def seed_demo(self):
         """Demo alerts matching the design reference so the dashboard reads

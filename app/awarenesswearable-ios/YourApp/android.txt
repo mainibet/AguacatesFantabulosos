@@ -1,0 +1,5 @@
+AguacatesFantab/
+  app/
+    AwarenessPin/
+      main.py
+      android.txt

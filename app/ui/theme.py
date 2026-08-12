@@ -43,7 +43,7 @@ DB_MAX = 120.0
 WINDOW_SIZE       = (400, 700)     # desktop dev window (phone-shaped)
 POLL_INTERVAL     = 0.15           # seconds between UI refreshes
 MAX_LOG_ENTRIES   = 200            # event store cap
-RECENT_WINDOW_MIN = 60             # "Recent alert" pill window (minutes)
+RECENT_WINDOW_MIN = 5             # "Recent alert" pill window (minutes)
 
 # ─────────────────────────────────────────────
 # RADII AND TYPOGRAPHY — tweak sizes here only

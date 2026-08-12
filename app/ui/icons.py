@@ -81,15 +81,16 @@ class IconWidget(Widget):
     may be stretched on one axis without distorting the icon. Use
     set_color() to retint."""
 
-    def __init__(self, name, color, size=(dp(16), dp(16)), **kwargs):
+    def __init__(self, name, color, size=(dp(16), dp(16)), stroke=None, **kwargs):
         super().__init__(**kwargs)
         self.size = size
         self._spec = ICONS[name]
+        self._stroke = dp(1.3) if stroke is None else stroke
         with self.canvas:
             self._color_instr = Color(*color)
             # One Line instruction per segment/path/circle primitive
             self._paths = [
-                Line(width=dp(1.3))
+                Line(width=self._stroke)
                 for prim in self._spec if prim[0] != "dot"
             ]
         self.bind(pos=self._draw, size=self._draw)
@@ -111,7 +112,9 @@ class IconWidget(Widget):
             return ox + v * scale
 
         def Y(v):
-            return oy + v * scale
+            # Lucide/SVG grid: y grows DOWN (y=0 is the top), so the
+            # screen mapping must flip the axis or icons render upside down.
+            return oy + (24 - v) * scale
 
         pi = 0
         for prim in self._spec:

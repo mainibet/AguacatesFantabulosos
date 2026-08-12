@@ -16,7 +16,7 @@ from ui.theme import (
     alpha, BG, CARD, SURFACE, BORDER, SECONDARY, TEXT, MUTED, AMBER, MINT,
     SKY, FONT_BODY, FONT_CAPTION, RADIUS_CARD, RADIUS_TILE, RADIUS_ROW,
 )
-from ui.data import format_value
+from ui.data import format_value, format_event_value
 from ui.icons import IconWidget
 
 
@@ -92,7 +92,7 @@ class IconTile(FloatLayout):
             self._ring = Line(rounded_rectangle=(0, 0, 0, 0, self._radius),
                               width=1.1)
         icon_size = dp(size * 0.5)
-        icon_w = IconWidget(name=icon, color=tone,
+        icon_w = IconWidget(name=icon, color=tone, stroke=dp(1.0),
                             size=(icon_size, icon_size),
                             size_hint=(None, None))
         icon_w.pos_hint = {"center_x": 0.5, "center_y": 0.5}
@@ -554,7 +554,7 @@ class EventRow(BoxLayout):
                       font_size=FONT_BODY, color=TEXT,
                       size_hint_y=None, halign="left", valign="middle")
         detail = Label(
-            text=f"{format_value(sensor.id, event.value)} · threshold "
+            text=f"{format_event_value(sensor.id, event.value)} · threshold "
                  f"{format_value(sensor.id, event.threshold)}",
             font_size=FONT_CAPTION, color=MUTED,
             size_hint_y=None, halign="left", valign="middle",

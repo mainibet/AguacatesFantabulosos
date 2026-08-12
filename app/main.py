@@ -1,7 +1,3 @@
-# app/main.py — Awareness Wearable companion app (Kivy).
-#
-# Implements the "Awareness Companion" dashboard design. UI sections live in
-# ui/dashboard.py, primitives in ui/widgets.py, sensor/event data in
 # ui/data.py and device services in services/.
 
 from kivy.app import App
@@ -13,7 +9,8 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.widget import Widget
 
 from ui.theme import BG, WINDOW_SIZE, POLL_INTERVAL
-from ui.data import EventsStore, SENSORS, DEFAULT_THRESHOLDS, LIGHT_LEVEL_LUX
+from ui.data import (EventsStore, SENSORS, DEFAULT_THRESHOLDS, LIGHT_LEVEL_LUX,
+                     NOISE_LEVEL_DB, CROWD_LEVEL_PPM)
 from ui.dashboard import (
     StatusBar, HeaderSection, SensorCard, RecentAlertsCard,
     FooterLabel, FullLogModal,
@@ -43,6 +40,8 @@ class RootLayout(FloatLayout):
         self._connected = False
         self._connected_manual = False   # True after the user taps the pill
         self._last_battery = None
+        self._config_dirty = True        # push thresholds on the first connect
+        self._cleared_demo = False       # demo alerts dropped on first connect
 
         # ── Services ──
         self._battery = BatteryMonitor()
@@ -124,6 +123,20 @@ class RootLayout(FloatLayout):
     # ─────────────────────────────────────────────
     def _on_threshold_change(self, sensor_id, value):
         self._thresholds[sensor_id] = value
+        # Re-arm the crossing detector: a reading that is above the NEW
+        # threshold must alert again (e.g. lowering the threshold while the
+        # sensor is already over it).
+        self._was_above[sensor_id] = False
+        # Re-evaluate the latest reading against the new threshold right
+        # away — the device may not send again until its next cycle.
+        # Throttled to 30s so dragging a slider through many values logs
+        # one alert, not one per snap.
+        live = self._live.get(sensor_id)
+        if live is not None:
+            age = self._events.last_event_seconds_ago(sensor_id)
+            if age is None or age > 30.0:
+                self._check_crossing(sensor_id, live)
+        self._config_dirty = True   # the device gates its alerts on this
         self._refresh_cards()
 
     def _check_crossing(self, sensor_id, value):
@@ -138,6 +151,10 @@ class RootLayout(FloatLayout):
     # CONNECTION AND BATTERY
     # ─────────────────────────────────────────────
     def _toggle_connection(self):
+        # Demo affordance only: with a real BLE backend the pill reflects
+        # the actual device connection, so manual toggling is disabled.
+        if self._ble.capable:
+            return
         self._connected = not self._connected
         self._connected_manual = True
 
@@ -151,6 +168,21 @@ class RootLayout(FloatLayout):
             self._connected = False
         self._status_bar.set_connected(self._connected)
         self._footer.set_connected(self._connected)
+
+        # First real device connection: drop the seeded demo alerts so the
+        # dashboard only ever shows real events once live data is flowing.
+        if self._ble.connected and not self._cleared_demo:
+            self._cleared_demo = True
+            self._events.clear()
+            self._was_above = {s.id: False for s in SENSORS}
+
+        # The device only notifies when its threshold is exceeded, so push
+        # the app thresholds over BLE whenever they change (or on connect).
+        if self._connected and self._config_dirty:
+            self._config_dirty = False
+            msg = (f"noise={self._thresholds['noise']:g}"
+                   f";light={self._thresholds['light']:g}")
+            self._ble.push_config(msg)
 
     def _update_battery(self):
         # Prefer the device reading, fall back to the OS battery
@@ -174,13 +206,14 @@ class RootLayout(FloatLayout):
         # Battery
         self._update_battery()
 
-        # Noise (BLE)
+        # Noise (BLE, traffic-light levels → dB)
         if self._ble.last_sound is not None:
-            val = self._ble.parse_sound(self._ble.last_sound)
+            level = self._ble.parse_sound(self._ble.last_sound)
             self._ble.last_sound = None
-            if val is not None:
-                self._live["noise"] = float(val)
-                self._check_crossing("noise", float(val))
+            if level is not None and level in NOISE_LEVEL_DB:
+                db = float(NOISE_LEVEL_DB[level])
+                self._live["noise"] = db
+                self._check_crossing("noise", db)
 
         # Light (BLE, three levels → lux)
         if self._ble.last_light is not None:
@@ -191,11 +224,21 @@ class RootLayout(FloatLayout):
                 self._live["light"] = lux
                 self._check_crossing("light", lux)
 
-        # Crowdness (BLE adjacency estimation)
-        crowd = self._crowdness.update()
-        if crowd is not None:
-            self._live["crowdness"] = crowd
-            self._check_crossing("crowdness", crowd)
+        # Crowdness: prefer the device's traffic-light count (phone and
+        # desktop), fall back to the local BLE-adjacency estimate (desktop
+        # only) when no device crowd data has arrived.
+        if self._ble.last_crowd is not None:
+            level = self._ble.parse_crowd(self._ble.last_crowd)
+            self._ble.last_crowd = None
+            if level is not None and level in CROWD_LEVEL_PPM:
+                ppm = float(CROWD_LEVEL_PPM[level])
+                self._live["crowdness"] = ppm
+                self._check_crossing("crowdness", ppm)
+        else:
+            crowd = self._crowdness.update()
+            if crowd is not None:
+                self._live["crowdness"] = crowd
+                self._check_crossing("crowdness", crowd)
 
         # Refresh every card and the recent alert list
         self._refresh_cards()
@@ -207,7 +250,7 @@ class RootLayout(FloatLayout):
             card.set_last_alert(self._events.last_for(sid))
             if not self._connected:
                 card.set_status("no_signal")
-            elif self._events.is_recent_alert(sid, self._thresholds[sid]):
+            elif self._events.is_recent_alert(sid):
                 card.set_status("recent")
             else:
                 card.set_status("ok")

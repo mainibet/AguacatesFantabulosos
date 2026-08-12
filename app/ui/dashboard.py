@@ -14,7 +14,8 @@ from ui.theme import (
     alpha, TEXT, MUTED, BORDER, SECONDARY, MINT, AMBER,
     FONT_LABEL, FONT_CAPTION, RADIUS_TILE,
 )
-from ui.data import TONE_COLORS, SENSOR_BY_ID, format_value, format_when, format_exact
+from ui.data import (TONE_COLORS, SENSOR_BY_ID, format_value, format_event_value,
+                     format_when, format_exact)
 from ui.icons import IconWidget
 from ui.widgets import (
     RoundedCard, Pill, IconTile, ThresholdSlider, EventRow, Modal,
@@ -38,9 +39,9 @@ class StatusBar(BoxLayout):
 
         # Cached glyphs reused across pill updates
         self._bt_on = IconWidget(name="bluetooth", color=MINT,
-                                 size=(dp(14), dp(16)))
+                                 size=(dp(14), dp(16)), stroke=dp(1.0))
         self._bt_off = IconWidget(name="bluetooth", color=MUTED,
-                                  size=(dp(14), dp(16)))
+                                  size=(dp(14), dp(16)), stroke=dp(1.0))
         self._bat_glyph = BatteryGlyph(pct=62, color=MINT)
 
         self._connect_pill = Pill(text="Connected", icon=self._bt_on,
@@ -272,7 +273,7 @@ class SensorCard(RoundedCard):
             self._last_lbl.text = "No alerts recorded yet"
         else:
             self._last_lbl.text = (
-                f"Last alert: {format_value(self._sensor.id, event.value)}"
+                f"Last alert: {format_event_value(self._sensor.id, event.value)}"
                 f" · {format_when(event.at)}"
             )
 

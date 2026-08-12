@@ -9,7 +9,12 @@ import asyncio
 import threading
 import time
 
-from bleak import BleakScanner
+try:
+    from bleak import BleakScanner
+    _BLEAK_AVAILABLE = True
+except ImportError:
+    # iOS (kivy-ios) has no bleak — no BLE scanner, so no crowd estimate.
+    _BLEAK_AVAILABLE = False
 
 # The wearable itself advertises under this name — never counted as a crowd
 DEVICE_NAME = "MyESP32C3_Sound"
@@ -37,7 +42,7 @@ class CrowdnessMonitor:
 
     def start(self):
         """Launch the background scanner thread (idempotent)."""
-        if self._thread is not None:
+        if not _BLEAK_AVAILABLE or self._thread is not None:
             return
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
