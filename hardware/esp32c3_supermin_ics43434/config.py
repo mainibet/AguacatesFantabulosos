@@ -6,8 +6,8 @@
 #   WS (LRCK) → GPIO4, SCK (BCLK) → GPIO5, SD (DATA) → GPIO6
 MIC_SCK_GPIO  = 5       # BCLK — bit clock from ESP32 to mic
 MIC_WS_GPIO   = 4       # LRCK — word select from ESP32 to mic
-MIC_SD_GPIO   = 10      # DATA — audio samples from mic to ESP32
-MIC_SLOT      = "R"     # L/R → 3V3 selects RIGHT channel; use "L" if L/R → GND
+MIC_SD_GPIO   = 6       # DATA — audio samples from mic to ESP32
+MIC_SLOT      = "L"     # L/R → GND selects LEFT channel (offset 0); use "R" if L/R → 3V3
 
 # ═══════════════════════════════════════════
 # SOUND — I2S sampling
