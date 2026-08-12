@@ -9,12 +9,29 @@ Redesigned UI to match the Awareness Companion design reference
 - Recent alerts list and a full alert log popup (last 7 days)
 - Line-drawn (lucide-style) icons replacing emoji glyphs
 - Crowdness now estimates density from nearby BLE devices (ppl/m²) instead of dummy data
+- iOS BLE backend (CoreBluetooth via pyobjus) — scan, connect, subscribe, read initial values, threshold push
+- Threshold sync to the device via the config characteristic (pushed on connect and on slider change)
 
 ### Changed
 - Color palette converted from the design's oklch tokens (dark indigo + mint/violet/sky tones)
 - Light level (dark/normal/bright) mapped to the design's lux scale
 - Event log is edge-triggered per sensor and records value + threshold
 - Comments translated to English and split into titled sections
+- Event rows show the traffic-light word (LOUD / BRIGHT / …) instead of label-derived units
+- "Recent alert" badge window shortened 60 → 5 minutes and made threshold-independent
+- Manual connection pill disabled while a real BLE backend exists
+
+### Fixed
+- Noise value misread as dB: the app treated the device's raw ADC amplitude (0–65535) as decibels — now parses the traffic-light label
+- Seeded demo alerts persisted after connecting to the real device — cleared on the first real connection
+- Raising a threshold erased existing "Recent alert" badges — alerts stay until they expire
+- Lowering a threshold while the reading was already above produced no alert — detector re-arms and re-evaluates immediately (30 s throttle against slider-drag spam)
+- Crowdness had no data source on iOS — subscribes to the device crowd characteristic (LOW/MODERATE/HIGH → ppl/m²)
+- Sensor icons rendered upside down (SVG y-axis was not flipped) and too bold (stroke 1.3 → 1.0)
+- First readings were missed on connect because the device notifies on edges only — the app now reads the current values right after subscribing
+- iOS bundle lacked `NSBluetoothAlwaysUsageDescription` (Bluetooth access silently blocked) — added
+- CoreBluetooth.framework was not linked in the Xcode project — added
+- Xcode build failed: sync script pointed at a non-existent folder and Xcode's script sandbox blocked rsync — fixed source/excludes and disabled sandboxing for script phases
 
 ---
 
@@ -50,5 +67,4 @@ Event UI prototype (HTML + Kivy layout concept) + threshold-based alerts (simula
 
 **upcoming:**
 v0.4 → Local storage (SQLite event log)
-v0.5 → Device communication (threshold sync via BLE)
 v1.0 → Stable Bluetooth event system + real crowd sensor

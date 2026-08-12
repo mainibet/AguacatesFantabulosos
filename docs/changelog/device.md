@@ -1,5 +1,13 @@
 
-### v0.3.0 - Connection hardening (current)
+### v0.4.0 - App-threshold gating & traffic-light notifications (current)
+- **Traffic-light notifications**: sound now sends its status for every level (`SOUND:LOUD|Red|noise=…`, consistent with light and crowd) instead of only `ALERT:LOUD` with a raw amplitude.
+- **Config characteristic** (`…4325`, writable): the device receives the app's thresholds (`noise=…;light=…`) and gates its notifications on them; the firmware defaults (75 / 800) are the fallback until the app pushes.
+- **Edge re-arm on threshold change**: lowering the threshold while a level is already above re-notifies (previously the detector stayed latched).
+- **Crowd initial reading**: the crowd monitor sends its first reading immediately on connect instead of after the 30 s accumulation window.
+- **aioble `capture=True`** on the config characteristic: `written()` otherwise returns the connection object instead of the payload, breaking the threshold parse.
+- **Hardware notes**: battery divider reads `BAT:0%|V:1.75` while charging (calibration pending — below the 3.0 V floor); this MicroPython build lacks `esp32.raw_dot11_sniffer`, so crowd always reports 0 devices; the board can hang after a deep power loss until replug/reset.
+
+### v0.3.0 - Connection hardening
 - **Crowdness**: Guarded `esp32.raw_dot11_sniffer` behind a capability check — builds without the sniffer API no longer crash the BLE session (report 0 instead).
 - **BLE lifecycle**: Monitor tasks are now guarded and cancelled on disconnect — a failing monitor can no longer tear down the connection, and no zombie tasks keep spamming errors against a dead connection after the client leaves.
 - **Reconnect**: Verified the device re-advertises after every disconnect (loop was previously unreachable when the monitors stayed alive).
